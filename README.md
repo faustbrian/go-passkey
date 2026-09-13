@@ -52,6 +52,10 @@ module from installable and released consumer catalogs. The local
 Passing repository checks proves only that the planning scaffold and metadata
 are internally consistent. It does not prove passkey behavior or an API.
 
+Security reports must use the private process, and the planned trust boundary
+and unresolved release-blocking risks are recorded in the
+[security policy](SECURITY.md).
+
 See the versioned [Golib ecosystem index](https://github.com/faustbrian/go-library-tools/blob/v1.4.0/docs/ecosystem/README.md)
 and [package-family guidance](https://github.com/faustbrian/go-library-tools/blob/v1.4.0/docs/ecosystem/design-language.md#package-families-and-selection)
 for the shared design language.

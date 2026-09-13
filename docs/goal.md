@@ -23,6 +23,10 @@ That record contains proposed contracts; it is not implementation evidence.
   checksum-verified `go-library-tools` v1.4.0 tooling.
 - Do not claim a public package identifier, installation path, runtime API,
   compatibility promise, or released behavior.
+- Keep the module non-releasable and its delivery release-blocked until the
+  private reporting process, planned trust boundary, and deferred security
+  risks in [`SECURITY.md`](../SECURITY.md) are resolved by an authorized
+  implementation goal.
 
 ## Deferred implementation
 
