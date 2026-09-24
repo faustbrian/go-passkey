@@ -3,6 +3,7 @@
   "caseSensitive": false,
   "files": [
     "README.md",
+    "SECURITY.md",
     "docs/**/*.md"
   ],
   "flagWords": [
