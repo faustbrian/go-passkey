@@ -1,5 +1,8 @@
 # Goal: planned go-passkey boundary
 
+[Documentation map](index.md) · [Repository README](../README.md)
+[Next: go-passkey](../README.md)
+
 Status: planned
 
 The coordination plan identifies `github.com/faustbrian/go-passkey` as the

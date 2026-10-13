@@ -10,6 +10,12 @@ policy. The plan keeps those concepts separate from WebAuthn verification,
 browser interfaces, non-discoverable security-key policy, and session
 persistence.
 
+## Planning documentation
+
+This repository remains planned and non-releasable. The
+[documentation map](docs/index.md) links its proposed contracts and security
+boundaries; it is not an installation or runtime guide.
+
 ## Planned responsibility
 
 The future root package is intended to own storage-neutral passkey policy,
@@ -68,8 +74,8 @@ Scheduled/manual runs retain whole-tree secrets and online authority refresh.
 These commands do not run application tests or establish runtime/release proof.
 See [contributing](CONTRIBUTING.md) for public tooling installation and scope.
 
-See the versioned [Golib ecosystem index](https://github.com/faustbrian/go-library-tools/blob/v1.4.0/docs/ecosystem/README.md)
-and [package-family guidance](https://github.com/faustbrian/go-library-tools/blob/v1.4.0/docs/ecosystem/design-language.md#package-families-and-selection)
+See the versioned [Golib ecosystem index](https://github.com/faustbrian/go-library-tools/blob/v1.8.4/docs/ecosystem/README.md)
+and [package-family guidance](https://github.com/faustbrian/go-library-tools/blob/v1.8.4/docs/ecosystem/design-language.md#package-families-and-selection)
 for the shared design language.
 
 ## License
