@@ -107,7 +107,7 @@
           "examples": null,
           "faq": null,
           "changelog": "CHANGELOG.md",
-          "pkg_go_dev": null,
+          "pkg_go_dev": "https://pkg.go.dev/github.com/faustbrian/go-passkey",
           "ecosystem_index": "https://github.com/faustbrian/go-library-tools/blob/v1.8.4/docs/ecosystem/README.md"
         },
         "known_good_compatibility_sets": [],
