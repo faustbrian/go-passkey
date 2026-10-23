@@ -2,6 +2,15 @@
 
 ## Unreleased
 
+- Retain existing transport data names as exact root-module aliases, including
+  the password owner's adapter-neutral primary request. Fields, native method
+  signatures, diagnostic labels and serialization errors remain compatible;
+  reflection now reports the defining root package.
+- Add authenticated original-ceremony rate metadata reads for registration,
+  identified signin and identifier-free signin. They preserve original browser,
+  mode, identifier and expiry binding without account lookup, risk admission,
+  challenge regeneration or proof consumption. Historical metadata is not a
+  current-validity lease: native completion still revalidates and consumes once.
 - Add opt-in keyed native registration and identified/discoverable signin
   options through the existing kernel request-key and recovery owners.
   Exact original input and browser/session possession retain one random

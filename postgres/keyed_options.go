@@ -11,6 +11,7 @@ import (
 	identity "github.com/faustbrian/go-identity"
 	kernel "github.com/faustbrian/go-identity/postgres"
 	"github.com/faustbrian/go-identity/session"
+	passkey "github.com/faustbrian/go-passkey"
 	webauthn "github.com/faustbrian/go-webauthn"
 )
 
@@ -48,104 +49,20 @@ func (OptionsRequestConfig) Format(s fmt.State, _ rune) {
 func (OptionsRequestConfig) MarshalJSON() ([]byte, error) { return nil, session.ErrSecretSerialization }
 func (OptionsRequestConfig) MarshalText() ([]byte, error) { return nil, session.ErrSecretSerialization }
 
-// KeyedRegistrationOptionsRequest carries the exact original key and native
-// authenticated enrollment input. Primary.CommandID and RecordID must be empty:
-// the existing request-key owner allocates the original random command. Caller
-// is trusted authenticated attribution, not browser-selected subject authority.
-// Session/CSRF possession and every structural proof field bind original intent;
-// consumed or expired proofs may reconcile metadata but never create a ceremony.
-type KeyedRegistrationOptionsRequest struct {
-	RegistrationRequest
-	IdempotencyKey identity.IdempotencyKey
-}
+// KeyedRegistrationOptionsRequest is the adapter-neutral passkey data contract.
+type KeyedRegistrationOptionsRequest = passkey.KeyedRegistrationOptionsRequest
 
-// KeyedSigninOptionsRequest carries exact original browser possession and key.
-// CommandID must be empty; correlation is selected from the original random
-// command. Caller is trusted service attribution and must match the configured
-// actor/tenant/action. The query resource is identity.anonymous-flow with FlowID,
-// as required by the kernel metadata owner, distinct from execution's preauth
-// resource. Identified mode retains the exact owner-canonical Identifier.
-type KeyedSigninOptionsRequest struct {
-	SigninRequest
-	IdempotencyKey identity.IdempotencyKey
-	Caller         authorization.DecisionContext
-}
+// KeyedSigninOptionsRequest is the adapter-neutral passkey data contract.
+type KeyedSigninOptionsRequest = passkey.KeyedSigninOptionsRequest
 
-// KeyedDiscoverableOptionsRequest selects identifier-free options under the same
-// original-key contract. It cannot reinterpret an identified request, and never
-// supplies user, tenant, actor or RP authority from browser data.
-type KeyedDiscoverableOptionsRequest struct {
-	DiscoverableSigninRequest
-	IdempotencyKey identity.IdempotencyKey
-	Caller         authorization.DecisionContext
-}
+// KeyedDiscoverableOptionsRequest is the adapter-neutral passkey data contract.
+type KeyedDiscoverableOptionsRequest = passkey.KeyedDiscoverableOptionsRequest
 
-// KeyedRegistrationOptionsResult retains the original command and safe native
-// receipt. Options exists only for the fresh committed winner; all replays,
-// pending and unknown outcomes are metadata-only. Replayed does not authorize
-// another reveal. A zero Receipt means no command outcome was established.
-type KeyedRegistrationOptionsResult struct {
-	CommandID identity.CommandID
-	Receipt   identity.CommandResult
-	Replayed  bool
-	Options   webauthn.RegistrationOptions
-}
+// KeyedRegistrationOptionsResult is the adapter-neutral passkey data contract.
+type KeyedRegistrationOptionsResult = passkey.KeyedRegistrationOptionsResult
 
-// KeyedAssertionOptionsResult has the same commit/replay semantics as keyed
-// registration, without authenticating anybody. Only the fresh committed winner
-// can TransferJSON once. Completion still needs its own one-use native command.
-type KeyedAssertionOptionsResult struct {
-	CommandID identity.CommandID
-	Receipt   identity.CommandResult
-	Replayed  bool
-	Options   webauthn.AssertionOptions
-}
-
-func (KeyedRegistrationOptionsRequest) Format(s fmt.State, _ rune) {
-	_, _ = s.Write([]byte("passkeypostgres.KeyedRegistrationOptionsRequest(redacted)"))
-}
-func (KeyedSigninOptionsRequest) Format(s fmt.State, _ rune) {
-	_, _ = s.Write([]byte("passkeypostgres.KeyedSigninOptionsRequest(redacted)"))
-}
-func (KeyedDiscoverableOptionsRequest) Format(s fmt.State, _ rune) {
-	_, _ = s.Write([]byte("passkeypostgres.KeyedDiscoverableOptionsRequest(redacted)"))
-}
-func (KeyedRegistrationOptionsResult) Format(s fmt.State, _ rune) {
-	_, _ = s.Write([]byte("passkeypostgres.KeyedRegistrationOptionsResult(redacted)"))
-}
-func (KeyedAssertionOptionsResult) Format(s fmt.State, _ rune) {
-	_, _ = s.Write([]byte("passkeypostgres.KeyedAssertionOptionsResult(redacted)"))
-}
-func (KeyedRegistrationOptionsRequest) MarshalJSON() ([]byte, error) {
-	return nil, session.ErrSecretSerialization
-}
-func (KeyedRegistrationOptionsRequest) MarshalText() ([]byte, error) {
-	return nil, session.ErrSecretSerialization
-}
-func (KeyedSigninOptionsRequest) MarshalJSON() ([]byte, error) {
-	return nil, session.ErrSecretSerialization
-}
-func (KeyedSigninOptionsRequest) MarshalText() ([]byte, error) {
-	return nil, session.ErrSecretSerialization
-}
-func (KeyedDiscoverableOptionsRequest) MarshalJSON() ([]byte, error) {
-	return nil, session.ErrSecretSerialization
-}
-func (KeyedDiscoverableOptionsRequest) MarshalText() ([]byte, error) {
-	return nil, session.ErrSecretSerialization
-}
-func (KeyedRegistrationOptionsResult) MarshalJSON() ([]byte, error) {
-	return nil, session.ErrSecretSerialization
-}
-func (KeyedRegistrationOptionsResult) MarshalText() ([]byte, error) {
-	return nil, session.ErrSecretSerialization
-}
-func (KeyedAssertionOptionsResult) MarshalJSON() ([]byte, error) {
-	return nil, session.ErrSecretSerialization
-}
-func (KeyedAssertionOptionsResult) MarshalText() ([]byte, error) {
-	return nil, session.ErrSecretSerialization
-}
+// KeyedAssertionOptionsResult is the adapter-neutral passkey data contract.
+type KeyedAssertionOptionsResult = passkey.KeyedAssertionOptionsResult
 
 func invalidOptionsRequest() error {
 	return identity.InvalidInputError{Field: "passkey_options_request"}
@@ -318,7 +235,7 @@ func (s *SigninService) KeyedAuthenticationOptions(ctx context.Context, r KeyedS
 // KeyedDiscoverableAuthenticationOptions selects identifier-free resident
 // options without changing the released identified or discoverable APIs.
 func (s *SigninService) KeyedDiscoverableAuthenticationOptions(ctx context.Context, r KeyedDiscoverableOptionsRequest) (KeyedAssertionOptionsResult, error) {
-	return s.keyedAuthenticationOptions(ctx, KeyedSigninOptionsRequest{SigninRequest: r.DiscoverableSigninRequest.request(), IdempotencyKey: r.IdempotencyKey, Caller: r.Caller}, true)
+	return s.keyedAuthenticationOptions(ctx, KeyedSigninOptionsRequest{SigninRequest: discoverableSigninRequest(r.DiscoverableSigninRequest), IdempotencyKey: r.IdempotencyKey, Caller: r.Caller}, true)
 }
 
 func (s *SigninService) keyedAuthenticationOptions(ctx context.Context, r KeyedSigninOptionsRequest, discoverable bool) (out KeyedAssertionOptionsResult, err error) {

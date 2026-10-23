@@ -503,6 +503,11 @@ func (p *signinInvocation) lockMapping(ctx context.Context, w kernel.Work) error
 	return nil
 }
 
+type identifiedSigninContext struct {
+	Flow, User, Identifier, Namespace, Global, Policy, Input                                                                                                            string
+	GlobalVersion, TenantVersion, UserVersion, IdentifierVersion, CredentialVersion, FactorVersion, PasskeyVersion, PolicyVersion, IdentifierRecord, VerificationRecord uint64
+}
+
 func (p *signinInvocation) contextWire() ([]byte, error) {
 	if p.discoverable {
 		return p.discoverableContextWire(true)
@@ -511,10 +516,7 @@ func (p *signinInvocation) contextWire() ([]byte, error) {
 	if err != nil {
 		return nil, err
 	}
-	return json.Marshal(struct {
-		Flow, User, Identifier, Namespace, Global, Policy, Input                                                                                                            string
-		GlobalVersion, TenantVersion, UserVersion, IdentifierVersion, CredentialVersion, FactorVersion, PasskeyVersion, PolicyVersion, IdentifierRecord, VerificationRecord uint64
-	}{string(flow.Binding.ID), string(p.recipient.User.ID), string(p.recipient.Identifier.ID), p.service.config().Profile.RPNamespace, p.directory.Query.GlobalAuthorityID, p.service.config().Profile.PolicyNamespace, p.identifier, p.directory.GlobalVersion, p.directory.TenantVersion, p.recipient.UserAuthorityVersion, p.recipient.IdentifierAuthorityVersion, p.recipient.CredentialAuthorityVersion, p.factor, p.passkey, p.policy, p.recipient.Identifier.Version, p.recipient.Verification.Version})
+	return json.Marshal(identifiedSigninContext{string(flow.Binding.ID), string(p.recipient.User.ID), string(p.recipient.Identifier.ID), p.service.config().Profile.RPNamespace, p.directory.Query.GlobalAuthorityID, p.service.config().Profile.PolicyNamespace, p.identifier, p.directory.GlobalVersion, p.directory.TenantVersion, p.recipient.UserAuthorityVersion, p.recipient.IdentifierAuthorityVersion, p.recipient.CredentialAuthorityVersion, p.factor, p.passkey, p.policy, p.recipient.Identifier.Version, p.recipient.Verification.Version})
 }
 func (p *signinInvocation) context(ctx context.Context, w kernel.Work, create bool) error {
 	wire, err := p.contextWire()

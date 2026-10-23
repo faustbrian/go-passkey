@@ -5,7 +5,6 @@ import (
 	"context"
 	"crypto/sha256"
 	"encoding/json"
-	"fmt"
 	"net/http"
 	"strconv"
 	"time"
@@ -16,57 +15,17 @@ import (
 	mfapg "github.com/faustbrian/go-identity/mfa/postgres"
 	kernel "github.com/faustbrian/go-identity/postgres"
 	"github.com/faustbrian/go-identity/session"
+	passkey "github.com/faustbrian/go-passkey"
 	webauthn "github.com/faustbrian/go-webauthn"
 )
 
-// DiscoverableSigninRequest retains the original anonymous browser/remember
-// flow and trusted ingress dimensions. There is deliberately no identifier,
-// user, actor, RP or tenant selection. IDs and ingress are server-selected;
-// Origin must exactly match trusted configuration. Secrets cannot be serialized.
-type DiscoverableSigninRequest struct {
-	CommandID                              identity.CommandID
-	FlowID                                 identity.PreAuthTransactionID
-	Cookie                                 session.Token
-	Origin, Network, Device, CorrelationID string
-}
+// DiscoverableSigninRequest is the adapter-neutral passkey data contract.
+type DiscoverableSigninRequest = passkey.DiscoverableSigninRequest
 
-// DiscoverableSigninCompletion adds the original committed anonymous resident
-// ceremony and bounded raw assertion. Only the root verifier's opaque signed
-// transition can select a user; caller-supplied handles are never authority.
-type DiscoverableSigninCompletion struct {
-	DiscoverableSigninRequest
-	CeremonyID string
-	Response   []byte
-}
+// DiscoverableSigninCompletion is the adapter-neutral passkey data contract.
+type DiscoverableSigninCompletion = passkey.DiscoverableSigninCompletion
 
-func (DiscoverableSigninRequest) Format(s fmt.State, _ rune) {
-	_, _ = s.Write([]byte("passkeypostgres.DiscoverableSigninRequest(redacted)"))
-}
-func (DiscoverableSigninCompletion) Format(s fmt.State, _ rune) {
-	_, _ = s.Write([]byte("passkeypostgres.DiscoverableSigninCompletion(redacted)"))
-}
-
-// MarshalJSON prohibits implicit browser-flow export.
-func (DiscoverableSigninRequest) MarshalJSON() ([]byte, error) {
-	return nil, session.ErrSecretSerialization
-}
-
-// MarshalText prohibits implicit browser-flow export.
-func (DiscoverableSigninRequest) MarshalText() ([]byte, error) {
-	return nil, session.ErrSecretSerialization
-}
-
-// MarshalJSON prohibits implicit browser-response export.
-func (DiscoverableSigninCompletion) MarshalJSON() ([]byte, error) {
-	return nil, session.ErrSecretSerialization
-}
-
-// MarshalText prohibits implicit browser-response export.
-func (DiscoverableSigninCompletion) MarshalText() ([]byte, error) {
-	return nil, session.ErrSecretSerialization
-}
-
-func (r DiscoverableSigninRequest) request() SigninRequest {
+func discoverableSigninRequest(r DiscoverableSigninRequest) SigninRequest {
 	return SigninRequest{CommandID: r.CommandID, FlowID: r.FlowID, Cookie: r.Cookie, Origin: r.Origin, Network: r.Network, Device: r.Device, CorrelationID: r.CorrelationID}
 }
 
@@ -81,7 +40,7 @@ func (s *SigninService) DiscoverableAuthenticationOptions(ctx context.Context, r
 	}
 	ctx, stop := context.WithTimeout(ctx, s.config().Protocol.MaximumDuration)
 	defer stop()
-	p, err := s.prepareProfile(ctx, r.request(), false, true)
+	p, err := s.prepareProfile(ctx, discoverableSigninRequest(r), false, true)
 	if err != nil {
 		return webauthn.AssertionOptions{}, err
 	}
@@ -104,7 +63,7 @@ func (s *SigninService) DiscoverableSignin(ctx context.Context, r DiscoverableSi
 	}
 	ctx, stop := context.WithTimeout(ctx, s.config().Protocol.MaximumDuration)
 	defer stop()
-	p, err := s.prepareProfile(ctx, r.DiscoverableSigninRequest.request(), true, true)
+	p, err := s.prepareProfile(ctx, discoverableSigninRequest(r.DiscoverableSigninRequest), true, true)
 	if err != nil {
 		if ctx.Err() != nil {
 			return SigninResult{}, ctx.Err()

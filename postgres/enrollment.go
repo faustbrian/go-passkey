@@ -44,27 +44,11 @@ type EnrollmentConfig struct {
 	PolicyVersion                     uint64
 }
 
-// RegistrationRequest carries original authenticated session and signed action
-// proof through the password owner's custody contract. Trusted ingress supplies
-// Caller and Network. User/actor are derived from the actual session, never
-// supplied here. Primary.TargetSubjectID must be empty. Origin is allowlisted
-// by the protocol owner. This selected profile requires a distinct exact action
-// proof for each protected phase, consumed atomically with that phase.
-type RegistrationRequest struct {
-	Primary                 passwordpg.ActionPrimaryRequest
-	Origin, Network, Device string
-}
+// RegistrationRequest is the adapter-neutral passkey data contract.
+type RegistrationRequest = passkey.RegistrationRequest
 
-// RegistrationCompletion adds the bounded raw browser response and original
-// creation command/ceremony ID. The new kernel credential reference is the
-// completion CommandID; callers cannot select or replace an existing reference.
-// Raw response bytes are borrowed for the call and copied after bounds checks.
-type RegistrationCompletion struct {
-	RegistrationRequest
-	CeremonyID string
-	Response   []byte
-	Label      string
-}
+// RegistrationCompletion is the adapter-neutral passkey data contract.
+type RegistrationCompletion = passkey.RegistrationCompletion
 
 // EnrollmentService owns real protocol/fresh-proof/mapping composition through
 // the existing coordinator. It starts no goroutines, owns no pool lifetime and
@@ -80,16 +64,6 @@ type EnrollmentService struct {
 // Format prevents borrowed scope, keys and proof-source diagnostics.
 func (EnrollmentConfig) Format(s fmt.State, _ rune) {
 	_, _ = s.Write([]byte("passkeypostgres.EnrollmentConfig(redacted)"))
-}
-
-// Format prevents bearer/proof/ingress disclosure.
-func (RegistrationRequest) Format(s fmt.State, _ rune) {
-	_, _ = s.Write([]byte("passkeypostgres.RegistrationRequest(redacted)"))
-}
-
-// Format prevents raw response and authentication-custody disclosure.
-func (RegistrationCompletion) Format(s fmt.State, _ rune) {
-	_, _ = s.Write([]byte("passkeypostgres.RegistrationCompletion(redacted)"))
 }
 
 // Format prevents borrowed infrastructure/configuration disclosure.
@@ -151,7 +125,7 @@ func enrollmentOperation(finish bool) identity.FeatureOperation {
 	return identity.FeatureOperation{Owner: "passkey", OperationID: id, SchemaID: id + ".native-v1", SchemaVersion: 1, RecordRequirement: identity.FeatureRecordRequired}
 }
 
-func (s *EnrollmentService) prepare(ctx context.Context, r RegistrationRequest, finish bool) (*enrollmentInvocation, error) {
+func (s *EnrollmentService) preparePrimary(ctx context.Context, r RegistrationRequest, finish bool) (*enrollmentInvocation, error) {
 	if ctx == nil || s == nil || s.config == nil || s.pool == nil {
 		return nil, identity.InvalidInputError{Field: "passkey_enrollment"}
 	}
@@ -184,18 +158,27 @@ func (s *EnrollmentService) prepare(ctx context.Context, r RegistrationRequest, 
 	if err != nil || allowed.Outcome != authorization.Allow || uint64(allowed.Revision) != c.PolicyVersion {
 		return nil, identity.ForbiddenError{}
 	}
+	return &enrollmentInvocation{Store: s.protocol, service: s, request: r, source: source, admission: admission, original: original, record: record, operation: op}, nil
+}
+
+func (s *EnrollmentService) prepare(ctx context.Context, r RegistrationRequest, finish bool) (*enrollmentInvocation, error) {
+	p, err := s.preparePrimary(ctx, r, finish)
+	if err != nil {
+		return nil, err
+	}
+	c := s.config()
 	factorBudget := min(c.Protocol.MaximumDuration, 5*time.Second)
-	factor, enrolled, err := mfapg.ReadPasswordSigninFactors(ctx, s.pool, record.TenantID, record.UserID, factorBudget)
+	factor, enrolled, err := mfapg.ReadPasswordSigninFactors(ctx, s.pool, p.record.TenantID, p.record.UserID, factorBudget)
 	if err != nil || enrolled {
 		return nil, identity.ForbiddenError{}
 	}
-	vector, err := record.Authority.Bindings()
+	vector, err := p.record.Authority.Bindings()
 	if err != nil || vector.Organization.Present || vector.Passkey.Present {
 		return nil, identity.ForbiddenError{}
 	}
 	var handle []byte
 	var authority string
-	err = s.pool.Raw().QueryRow(ctx, `SELECT user_handle,authority_version::text FROM identity_passkey.user_handles WHERE rp_namespace=$1 AND tenant_id=$2 AND user_id=$3`, c.RPNamespace, string(record.TenantID), string(record.UserID)).Scan(&handle, &authority)
+	err = s.pool.Raw().QueryRow(ctx, `SELECT user_handle,authority_version::text FROM identity_passkey.user_handles WHERE rp_namespace=$1 AND tenant_id=$2 AND user_id=$3`, c.RPNamespace, string(p.record.TenantID), string(p.record.UserID)).Scan(&handle, &authority)
 	version := uint64(1)
 	if err != nil {
 		if !isAbsent(err) {
@@ -215,7 +198,9 @@ func (s *EnrollmentService) prepare(ctx context.Context, r RegistrationRequest, 
 			return nil, identity.UnavailableError{}
 		}
 	}
-	return &enrollmentInvocation{Store: s.protocol, service: s, request: r, source: source, admission: admission, original: original, record: record, operation: op, handle: handle, authorityVersion: version, factorVersion: factor, epochs: kernel.UserAuthorityAdmission{UserAuthorityVersion: vector.User.Version, IdentifierAuthorityVersion: vector.Identifier.Version, CredentialAuthorityVersion: vector.Credential.Version}}, nil
+	p.handle, p.authorityVersion, p.factorVersion = handle, version, factor
+	p.epochs = kernel.UserAuthorityAdmission{UserAuthorityVersion: vector.User.Version, IdentifierAuthorityVersion: vector.Identifier.Version, CredentialAuthorityVersion: vector.Credential.Version}
+	return p, nil
 }
 
 // RegistrationOptions authenticates a genuine existing session and exact fresh

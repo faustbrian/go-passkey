@@ -23,6 +23,7 @@ import (
 	"github.com/faustbrian/go-identity/risk"
 	"github.com/faustbrian/go-identity/session"
 	sessionpg "github.com/faustbrian/go-identity/session/postgres"
+	passkey "github.com/faustbrian/go-passkey"
 	database "github.com/faustbrian/go-postgres"
 	webauthn "github.com/faustbrian/go-webauthn"
 	webauthnpg "github.com/faustbrian/go-webauthn/postgres"
@@ -54,37 +55,14 @@ type SigninConfig struct {
 	IdentifierKey   []byte
 }
 
-// SigninRequest carries original browser flow/cookie, exact owner-canonical
-// verified email, and trusted ingress dimensions. IDs/correlation are selected
-// by the server. Identifier is an exact lookup, not normalized by this adapter.
-// Neither user nor actor can be selected by a caller. Cookie is never retained
-// in a command. Origin must equal the trusted flow origin byte for byte.
-type SigninRequest struct {
-	CommandID                                          identity.CommandID
-	FlowID                                             identity.PreAuthTransactionID
-	Cookie                                             session.Token
-	Identifier, Origin, Network, Device, CorrelationID string
-}
+// SigninRequest is the adapter-neutral passkey data contract.
+type SigninRequest = passkey.SigninRequest
 
-// SigninCompletion adds the original committed assertion ceremony and bounded
-// raw browser response. Expected protocol version is owner-derived, not client
-// input. Replays and ambiguous outcomes never return new authentication.
-type SigninCompletion struct {
-	SigninRequest
-	CeremonyID string
-	Response   []byte
-}
+// SigninCompletion is the adapter-neutral passkey data contract.
+type SigninCompletion = passkey.SigninCompletion
 
-// SigninResult contains a session only after genuine root verification and the
-// sole durable command commit. CSRF shares reveal-once custody with that issue.
-type SigninResult struct {
-	Session session.IssueResult
-	CSRF    session.CSRFToken
-	// CounterRisk is the root verifier's warning for a backup-eligible
-	// non-increasing counter. It is available only with committed signin;
-	// it neither declares compromise nor invalidates the synced passkey.
-	CounterRisk bool
-}
+// SigninResult is the adapter-neutral passkey data contract.
+type SigninResult = passkey.SigninResult
 
 // SigninService composes existing preauth/risk/WebAuthn/identity/session owners.
 // It owns no pool lifetime, goroutine, private journal, proof or session store.
@@ -103,15 +81,6 @@ type SigninService struct {
 func (SigninConfig) Format(s fmt.State, _ rune) {
 	_, _ = s.Write([]byte("passkeypostgres.SigninConfig(redacted)"))
 }
-func (SigninRequest) Format(s fmt.State, _ rune) {
-	_, _ = s.Write([]byte("passkeypostgres.SigninRequest(redacted)"))
-}
-func (SigninCompletion) Format(s fmt.State, _ rune) {
-	_, _ = s.Write([]byte("passkeypostgres.SigninCompletion(redacted)"))
-}
-func (SigninResult) Format(s fmt.State, _ rune) {
-	_, _ = s.Write([]byte("passkeypostgres.SigninResult(redacted)"))
-}
 func (SigninService) Format(s fmt.State, _ rune) {
 	_, _ = s.Write([]byte("passkeypostgres.SigninService(redacted)"))
 }
@@ -121,24 +90,6 @@ func (SigninConfig) MarshalJSON() ([]byte, error) { return nil, session.ErrSecre
 
 // MarshalText prohibits implicit configuration or credential transport.
 func (SigninConfig) MarshalText() ([]byte, error) { return nil, session.ErrSecretSerialization }
-
-// MarshalJSON prohibits implicit browser-flow export.
-func (SigninRequest) MarshalJSON() ([]byte, error) { return nil, session.ErrSecretSerialization }
-
-// MarshalText prohibits implicit browser-flow export.
-func (SigninRequest) MarshalText() ([]byte, error) { return nil, session.ErrSecretSerialization }
-
-// MarshalJSON prohibits implicit browser-response export.
-func (SigninCompletion) MarshalJSON() ([]byte, error) { return nil, session.ErrSecretSerialization }
-
-// MarshalText prohibits implicit browser-response export.
-func (SigninCompletion) MarshalText() ([]byte, error) { return nil, session.ErrSecretSerialization }
-
-// MarshalJSON prohibits implicit authentication export.
-func (SigninResult) MarshalJSON() ([]byte, error) { return nil, session.ErrSecretSerialization }
-
-// MarshalText prohibits implicit authentication export.
-func (SigninResult) MarshalText() ([]byte, error) { return nil, session.ErrSecretSerialization }
 
 // NewSigninService validates native composition without IO or entropy. The
 // exact profile is retained across preauth issue, options and final session.
@@ -248,12 +199,11 @@ func (s *SigninService) prepare(ctx context.Context, r SigninRequest, finish boo
 	return s.prepareProfile(ctx, r, finish, false)
 }
 
-func (s *SigninService) prepareProfile(ctx context.Context, r SigninRequest, finish, discoverable bool) (*signinInvocation, error) {
+func (s *SigninService) prepareFlow(ctx context.Context, r SigninRequest, finish, discoverable bool) (*signinInvocation, error) {
 	if ctx == nil || s == nil || s.config == nil {
 		return nil, identity.InvalidInputError{Field: "passkey_signin"}
 	}
 	c := s.config()
-	op := signinOperation(finish)
 	if _, err := identity.ParseCommandID(string(r.CommandID)); err != nil {
 		return nil, err
 	}
@@ -282,8 +232,17 @@ func (s *SigninService) prepareProfile(ctx context.Context, r SigninRequest, fin
 		_, _ = h.Write([]byte("passkey-identified-email-v1\x00" + string(c.Protocol.TenantID) + "\x00" + r.Identifier))
 		identifier = hex.EncodeToString(h.Sum(nil))
 	}
-	subject := risk.Subject{Network: r.Network, Device: r.Device, IdentifierDigest: identifier}
-	scope := risk.Context{Tenant: string(c.Protocol.TenantID), Operation: risk.Action(op.OperationID), Attempt: string(r.CommandID)}
+	return &signinInvocation{Store: s.protocol, service: s, request: r, operation: signinOperation(finish), flow: flow, cookie: digest, identifier: identifier, discoverable: discoverable}, nil
+}
+
+func (s *SigninService) prepareProfile(ctx context.Context, r SigninRequest, finish, discoverable bool) (*signinInvocation, error) {
+	p, err := s.prepareFlow(ctx, r, finish, discoverable)
+	if err != nil {
+		return nil, err
+	}
+	c := s.config()
+	subject := risk.Subject{Network: r.Network, Device: r.Device, IdentifierDigest: p.identifier}
+	scope := risk.Context{Tenant: string(c.Protocol.TenantID), Operation: risk.Action(p.operation.OperationID), Attempt: string(r.CommandID)}
 	// identity.security.v1's risk subset admits anonymous/human/system actors,
 	// not service attribution. This remains an unauthenticated browser attempt;
 	// the service still owns the actual protocol and options command actor.
@@ -295,11 +254,10 @@ func (s *SigninService) prepareProfile(ctx context.Context, r SigninRequest, fin
 	if err != nil {
 		return nil, err
 	}
-	directory, err := s.directory.GetDirectoryAuthority(ctx, kernel.DirectoryAuthorityQuery{GlobalAuthorityID: c.Profile.GlobalAuthorityID, TenantID: c.Protocol.TenantID})
-	if err != nil || !directory.Enabled {
-		return nil, identity.ForbiddenError{}
+	if err := p.prepareDirectory(ctx); err != nil {
+		return nil, err
 	}
-	p := &signinInvocation{Store: s.protocol, service: s, request: r, operation: op, flow: flow, cookie: digest, directory: directory, risk: riskAdmission, identifier: identifier, discoverable: discoverable}
+	p.risk = riskAdmission
 	if discoverable {
 		return p, nil
 	}

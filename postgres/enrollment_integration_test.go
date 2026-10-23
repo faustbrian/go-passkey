@@ -231,9 +231,9 @@ func TestPasskeyEnrollmentRequiredEffectFailureRollsBack(t *testing.T) {
 	}
 }
 
-func pendingEnrollment(t *testing.T) (*enrollmentFixture, RegistrationCompletion) {
+func pendingEnrollment(t *testing.T, proofClock ...func() time.Time) (*enrollmentFixture, RegistrationCompletion) {
 	t.Helper()
-	f := newEnrollmentFixture(t)
+	f := newEnrollmentFixture(t, proofClock...)
 	request := f.request(t, false)
 	options, err := f.service.RegistrationOptions(f.ctx, request)
 	if err != nil {

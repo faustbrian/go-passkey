@@ -10,15 +10,15 @@ require (
 	github.com/faustbrian/go-clock v1.2.0
 	github.com/faustbrian/go-identity v0.0.0-20261021021214-46ae60703809
 	github.com/faustbrian/go-identity/mfa/postgres v0.0.0-20261023151855-1d7a572f1afa
-	github.com/faustbrian/go-identity/password v0.0.0-20261020120243-19670fe0ec13
-	github.com/faustbrian/go-identity/password/postgres v0.0.0-20261023150127-219499bdccd5
+	github.com/faustbrian/go-identity/password v0.0.0-20261023192729-324d7aeea43e
+	github.com/faustbrian/go-identity/password/postgres v0.0.0-20261023193300-358f9c9f1efc
 	github.com/faustbrian/go-identity/postgres v0.0.0-20261023160159-9a09aa4a9171
 	github.com/faustbrian/go-identity/risk v0.0.0-20261023181921-a13a6825051c
 	github.com/faustbrian/go-identity/risk/postgres v0.0.0-20261023150127-219499bdccd5
 	github.com/faustbrian/go-identity/session v0.0.0-20261023150127-219499bdccd5
 	github.com/faustbrian/go-identity/session/postgres v0.0.0-20261023150127-219499bdccd5
 	github.com/faustbrian/go-migrations/v3 v3.1.1-0.20261015110643-ca105f265cfc
-	github.com/faustbrian/go-passkey v0.0.0-20261023165632-ccdec8683970
+	github.com/faustbrian/go-passkey v0.0.0-20261023194522-8c3a70327962
 	github.com/faustbrian/go-password/v2 v2.0.2-0.20261015050515-4eb0fefa60ff
 	github.com/faustbrian/go-postgres v1.1.1-0.20260912090843-61261695bcc7
 	github.com/faustbrian/go-transactional-outbox/postgres/identity v0.0.0-20261020135213-493107bf82af

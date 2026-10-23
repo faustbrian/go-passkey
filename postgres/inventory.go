@@ -37,41 +37,14 @@ type InventoryConfig struct {
 	MaximumDuration   time.Duration
 }
 
-// InventoryRequest supplies trusted ingress attribution and a genuine selected
-// session credential. The target is always that session's user. Limit is1..100;
-// After is the last returned reference ID, never a protocol credential/handle.
-// AttemptID is a distinct server-issued rate identity per logical read, not
-// client-selected replay or authorization. Cookie parsing belongs to transport.
-type InventoryRequest struct {
-	Credential session.Credential
-	Caller     authorization.DecisionContext
-	AttemptID  identity.CommandID
-	After      string
-	Limit      int
-}
+// InventoryRequest is the adapter-neutral passkey data contract.
+type InventoryRequest = passkey.InventoryRequest
 
-// CredentialMetadata is the explicit safe self-user projection. ReferenceID is
-// the identity-owned management reference, not the raw RP credential ID. AAGUID
-// and backup flags come only from the protocol owner's stored verified record;
-// labels are untrusted display text, never authenticator provenance. Public
-// keys, counters, handles, challenges and authentication custody are omitted.
-type CredentialMetadata struct {
-	ReferenceID                 string
-	Version                     uint64
-	State, Label                string
-	AAGUID                      [16]byte
-	BackupEligible, BackupState bool
-	CreatedAt                   time.Time
-	LastUsedAt                  *time.Time
-}
+// CredentialMetadata is the adapter-neutral passkey data contract.
+type CredentialMetadata = passkey.CredentialMetadata
 
-// InventoryPage owns one bounded page and its exclusive keyset cursor. Next is
-// empty at the observed end; it grants no authority and is not a durable snapshot
-// across subsequent calls. Concurrent changes may appear on later pages.
-type InventoryPage struct {
-	Credentials []CredentialMetadata
-	Next        string
-}
+// InventoryPage is the adapter-neutral passkey data contract.
+type InventoryPage = passkey.InventoryPage
 
 // InventoryService authenticates and authorizes self-user metadata reads. It
 // borrows concrete native owners, performs no credential mutation and exposes
@@ -86,9 +59,6 @@ type InventoryService struct {
 
 func (InventoryConfig) Format(s fmt.State, _ rune) {
 	_, _ = s.Write([]byte("passkeypostgres.InventoryConfig(redacted)"))
-}
-func (InventoryRequest) Format(s fmt.State, _ rune) {
-	_, _ = s.Write([]byte("passkeypostgres.InventoryRequest(redacted)"))
 }
 func (InventoryService) Format(s fmt.State, _ rune) {
 	_, _ = s.Write([]byte("passkeypostgres.InventoryService(redacted)"))

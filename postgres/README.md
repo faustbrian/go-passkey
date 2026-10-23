@@ -38,6 +38,32 @@ Enrollment accepts up to 100 existing exclusion descriptors in this selected
 protocol profile. That options bound does not cap usable signin credentials:
 adding the 101st passkey cannot disable the existing or newly enrolled keys.
 
+Transport-facing data types are owned by root `go-passkey`; existing names in
+this adapter remain exact aliases, not wrappers. Native method signatures and
+existing field/diagnostic/serialization behavior are unchanged. Reflection now
+reports their root defining package. No pool, SQL or native configuration has
+moved into the neutral module.
+
+`RegistrationRateSource`, `SigninRateSource` and
+`DiscoverableSigninRateSource` authenticate the original source custody and
+return sensitive original rate metadata only. Supply the genuine completion
+phase's session/action proof for registration, or the original browser cookie,
+flow and exact identified/identifier-free mode for signin. The retained native
+admission must match the original committed ceremony and trusted deployment.
+Identified metadata returns the exact original canonical identifier even when
+its original account lookup was suppressed; it never projects account
+eligibility or a resolved user. Identifier-free metadata returns only its
+original anonymous flow dimension. These reads do no account lookup, risk
+admission, proof consumption, challenge transfer or session issuance.
+
+The original ceremony policy lifetime is fixed; a read never renews its expiry.
+Malformed, foreign, expired or wrong-mode custody returns no dimensions.
+Historical consumed metadata may remain readable while original custody and
+time remain valid. It is not a validity lease or permission to execute:
+completion independently repeats current authority checks and atomically
+consumes proof/flow/ceremony in the existing coordinator Work. A metadata read
+cannot permit a repeated mutation, challenge or authentication reveal.
+
 `RecoverEnrollment` uses the existing coordinator and current disclosure policy
 to read or reconcile the original command. It returns historical metadata only,
 never another challenge, verified credential, token or permission to replay.
