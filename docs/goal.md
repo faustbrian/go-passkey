@@ -1,9 +1,32 @@
-# Goal: planned go-passkey boundary
+# Goal: go-passkey implementation
 
 [Documentation map](index.md) · [Repository README](../README.md)
 [Next: go-passkey](../README.md)
 
-Status: planned
+Status: in progress; incomplete and non-releasable
+
+The authorized identity-platform implementation supersedes the planning-only
+restriction below. Current component APIs and their limitations are described
+in the [README](../README.md). They do not close the full passkey goal.
+
+Required end state: authenticated enrollment, passkey-first registration,
+identified and discoverable/usernameless signin, conditional option generation,
+safe metadata listing, fresh-proof rename/deletion and last-recovery-method
+policy. Preserve stable opaque handles and credential-ID uniqueness across the
+complete RP namespace, exact tenant isolation, UV, original remember policy,
+backup/counter semantics and typed selected extension outputs. Protocol
+verification and credential state remain with WebAuthn; identity mappings and
+required session effects commit through the sole existing coordinator.
+
+The complete consumer journey, denial/replay/concurrency/rollback/recovery,
+real authenticator interoperability, public adoption, independent review and
+mandatory final qualification remain required. No helper or component test is
+whole-workflow completion.
+
+## Preserved planning baseline
+
+The following records the earlier planning-only scope; it does not prohibit
+the authorized implementation above or establish current runtime completion.
 
 The coordination plan identifies `github.com/faustbrian/go-passkey` as the
 future storage-neutral owner of identity-facing passkey enrolment,

@@ -2,10 +2,10 @@
 
 ## Supported versions
 
-There are no supported versions. This repository contains planning metadata
-only: it has no importable package, runtime implementation, tag, or release.
-The planned module is non-releasable and its release remains blocked until a
-separately authorized implementation satisfies the security boundaries below.
+There are no supported releases. This checkpoint provides experimental root
+handle/label contracts only. Native PostgreSQL workflow work is unpublished;
+complete passkey authentication is not available. The root remains
+non-releasable; full workflow/security boundaries must be proven before release.
 
 ## Private reporting
 
@@ -20,14 +20,17 @@ credentials, attestation objects, authenticator data, signatures, session
 tokens, recovery material, or unredacted service output. Use synthetic fixtures
 and redact account, relying-party, origin, device, and transport identifiers.
 
-## Planned security boundary
+## Security boundary
 
-The future package may own storage-neutral policy for passkey registration and
+The root package owns the storage-neutral boundary for passkey registration and
 authentication flows, credential profiles, stable opaque user-handle policy,
 backup state, device labels, credential lifecycle, passkey-first decisions, and
 account-recovery coordination. It must not implement WebAuthn wire parsing or
 cryptographic verification, retain ceremony state, render browser interfaces,
-issue sessions, or own persistence and infrastructure resources.
+issue sessions, or own persistence and infrastructure resources. The planned
+native PostgreSQL adapter must own identity-facing mappings, not protocol
+records or an independent factor/session authority; it is not delivered by
+this root-contract checkpoint.
 
 The caller and composed WebAuthn implementation remain responsible for HTTPS,
 origin and relying-party binding, challenge entropy and single use, ceremony
@@ -38,9 +41,9 @@ security control and must not be used as an authentication dependency.
 
 ## Risk disposition and release blockers
 
-No runtime residual risk is accepted because no runtime exists. The following
-risks are deferred to implementation and block release until their contracts,
-bounds, tests, and ownership are explicit:
+No production risk acceptance follows from the experimental implementation.
+The following obligations block release until their contracts, bounds, tests,
+ownership and complete consumer composition are proven:
 
 | Risk | Disposition required before release |
 | --- | --- |
@@ -52,8 +55,7 @@ bounds, tests, and ownership are explicit:
 | Resource exhaustion and lifecycle leaks | Bound input sizes, collection cardinality, storage work, callbacks, and diagnostics before allocation; require context cancellation and caller-owned resource lifetimes. |
 | Dependency or specification drift | Pin maintained dependencies, record license and vulnerability review, bind behavior to the selected WebAuthn specification profile, and require interoperability evidence for claimed support. |
 
-The only present risk is that planning metadata could be mistaken for an
-available security product. The planned lifecycle, non-releasable manifest,
-release-blocked delivery state, absent runtime package, and public status notice
-mitigate that risk. Any source implementation or install guidance requires a
-new authorized goal and proportionate security review.
+Passing component tests or structural checks does not establish a working
+authentication backend. Non-releasable manifests, release-blocked delivery and
+the public incomplete-status notice remain until full qualification. No tags,
+release or deployment are authorized by implementation progress.

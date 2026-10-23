@@ -1,7 +1,7 @@
 # Contributing
 
-This repository is a planned, non-releasable scaffold, not an implemented Go
-application or installable library. Read [AGENTS.md](AGENTS.md),
+This repository is an experimental, non-releasable implementation, not a
+complete authentication backend. Read [AGENTS.md](AGENTS.md),
 [the current planning scope](docs/goal.md) and [SECURITY.md](SECURITY.md).
 Implementation programs and frozen planning records require their own
 authorization; changing verification does not activate them.
@@ -10,8 +10,8 @@ authorization; changing verification does not activate them.
 
 Use Go 1.27.2; the module minimum remains Go 1.27.0. An isolated checkout
 needs no sibling repositories or coordination goal files for these checks.
-Install the public v2.1.2 binary archive for your platform from
-[go-library-tools releases](https://github.com/faustbrian/go-library-tools/releases/tag/v2.1.2).
+Install the public v2.5.1 binary archive for your platform from
+[go-library-tools releases](https://github.com/faustbrian/go-library-tools/releases/tag/v2.5.1).
 Verify `checksums.txt` against the digest in `.golib.yaml`, then verify the
 archive against that checksum set. Put the extracted binary on `PATH` or
 select its path through `GOLIB`; do not build Tools from source. CI uses the
@@ -58,6 +58,11 @@ make secrets-check
 
 Scheduled/manual Required retains online authority refresh and whole-tree/history
 secrets with the existing twenty-minute outer cap. These commands preserve
-planning acceptance only. There are no application tests, active fuzz targets,
-mutation campaigns, runtime conformance claims or releasable modules to qualify.
-No application release is authorized by a green planning check.
+planning acceptance only. They do not run experimental Go implementation tests
+or establish runtime conformance, complete mutation qualification or releasable
+module readiness. No release is authorized by a green planning check.
+
+For the root implementation, keep the disposable Go environment above and run
+`GOWORK=off go test -race .`. Root hostile-boundary fuzz targets cover opaque
+handles and bounded UTF-8 labels. Native workflow composition, public consumer
+adoption and full release qualification remain separate unfinished work.

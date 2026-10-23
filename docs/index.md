@@ -2,12 +2,12 @@
 
 [Repository README](../README.md) · [Current Golib portal](https://github.com/faustbrian/go-library-tools/blob/main/docs/ecosystem/README.md) · [Published ecosystem snapshot](https://github.com/faustbrian/go-library-tools/blob/v1.8.4/docs/ecosystem/README.md)
 
-**Status: planned and non-releasable.** These pages describe proposed
-contracts and required evidence, not an installable API or implemented runtime.
+**Status: experimental, incomplete and non-releasable.** Component APIs exist;
+the complete identity-facing passkey workflow remains unfinished.
 
 ## Choose and adopt
 
-- [Goal: planned go-passkey boundary](goal.md).
+- [Goal: go-passkey implementation](goal.md).
 
 ## Related next steps
 

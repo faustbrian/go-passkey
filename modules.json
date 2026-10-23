@@ -11,25 +11,25 @@
         {
           "module_directory": ".",
           "directory": ".",
-          "name": "planned",
+          "name": "passkey",
           "import_path": "github.com/faustbrian/go-passkey",
-          "kind": "planned entry point",
-          "production": false,
-          "executable": false,
-          "coverage_required": false,
-          "build_required": false,
+          "kind": "public",
+          "production": true,
+          "executable": true,
+          "coverage_required": true,
+          "build_required": true,
           "build_tags": []
         }
       ],
-      "purpose": "Planned storage-neutral passkey core for identity-facing enrolment, discoverable credentials, passwordless signup and sign-in, backup state, credential management, and passkey-first policy; no runtime package is implemented or released.",
-      "lifecycle": "planned",
+      "purpose": "Experimental identity-facing passkey contracts. Opaque handles and bounded labels exist; complete registration, authentication and management workflows remain in development.",
+      "lifecycle": "experimental",
       "kind": "public library",
       "releasable": false,
       "family": "service-edge",
       "family_label": "Service Edge",
       "family_description": "Request-edge policy, identity, access decisions, routing, middleware, and process lifecycle.",
       "family_order": 2,
-      "version": "",
+      "version": "0.0.0",
       "tag_prefix": "v",
       "owned_dependencies": [],
       "reverse_owned_dependencies": [],
@@ -44,7 +44,7 @@
       "goal_files": [
         "docs/goal.md"
       ],
-      "goal_status": "planned",
+      "goal_status": "in-progress",
       "goal_evidence": [],
       "cohesion": {
         "family": "service-edge",
@@ -53,20 +53,20 @@
           "identity-and-access",
           "protocols-and-schemas"
         ],
-        "responsibility": "Plan storage-neutral passkey policy for identity-facing enrolment, discoverable credentials, passwordless signup and sign-in, backup state, credential management, and passkey-first flows.",
+        "responsibility": "Own identity-facing passkey policy and contracts without duplicating WebAuthn verification or session persistence. Current implementation is incomplete.",
         "non_goals": [
-          "Claim that a public package identifier, runtime API, implementation, compatibility promise, or release currently exists.",
+          "Claim a complete authentication workflow, release qualification or a published release.",
           "Own WebAuthn wire verification, ceremony storage, non-discoverable security-key policy, browser interfaces, or session persistence.",
           "Own identity, risk, authentication, identifier, audit, database, transaction, cache, migration, or background-worker behavior."
         ],
-        "public_package_identifier": "none",
+        "public_package_identifier": "passkey",
         "primary_entry_packages": [
           "github.com/faustbrian/go-passkey"
         ],
         "package_selection": {
-          "github.com/faustbrian/go-passkey": "Planning identity only; no importable package or runtime API currently exists."
+          "github.com/faustbrian/go-passkey": "Experimental opaque handle and label contracts; complete identity authentication workflows remain unfinished."
         },
-        "lifecycle_status": "planned",
+        "lifecycle_status": "active",
         "maturity": "experimental",
         "construction_styles": [
           "new-config",
@@ -89,7 +89,7 @@
         "supported_go": {
           "minimum": "1.27.0",
           "tested": [
-            "1.27.0"
+            "1.27.2"
           ]
         },
         "supported_platforms": [
@@ -99,21 +99,21 @@
         "supported_protocols": [],
         "documentation": {
           "readme": "README.md",
-          "api": null,
-          "adoption": null,
+          "api": "README.md",
+          "adoption": "README.md",
           "security": "SECURITY.md",
           "compatibility": null,
           "performance": null,
           "examples": null,
           "faq": null,
-          "changelog": null,
+          "changelog": "CHANGELOG.md",
           "pkg_go_dev": null,
           "ecosystem_index": "https://github.com/faustbrian/go-library-tools/blob/v1.8.4/docs/ecosystem/README.md"
         },
         "known_good_compatibility_sets": [],
         "delivery": {
-          "implementation": "not-started",
-          "hardening": "not-started",
+          "implementation": "in-progress",
+          "hardening": "in-progress",
           "release": "blocked"
         }
       },

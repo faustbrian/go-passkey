@@ -1,68 +1,78 @@
 # go-passkey
 
-> **Status: planned.** This repository does not currently provide an
-> installable package, a released version, or a runtime API.
+> **Experimental, incomplete and unreleased.** Component APIs exist, but the
+> complete passkey enrollment/signin/session workflow is not available yet.
 
-`go-passkey` reserves the planned Golib boundary for identity-facing passkey
+`go-passkey` implements the Golib boundary for identity-facing passkey
 enrolment, discoverable credentials, passwordless signup and sign-in, synced
 and backup state, credential naming, listing, deletion, and passkey-first
 policy. The plan keeps those concepts separate from WebAuthn verification,
 browser interfaces, non-discoverable security-key policy, and session
 persistence.
 
-## Planning documentation
+## Current API
 
-This repository remains planned and non-releasable. The
-[documentation map](docs/index.md) links its proposed contracts and security
-boundaries; it is not an installation or runtime guide.
+- `UserHandlePolicy.Generate` creates a random opaque 32-byte handle for first
+  enrollment. Persist and reuse the first committed identity/RP mapping; never
+  regenerate an existing handle on ordinary reads or retries.
+- `NewUserHandle` imports exact stored bytes without normalization or aliasing.
+  Protocol/storage projection is explicit; implicit JSON/text export and
+  diagnostic disclosure are prohibited.
+- `NewDeviceLabel` preserves bounded UTF-8 display text. A label is not device
+  identity, authenticator provenance or authorization. Escape its explicitly
+  projected text for the output medium.
+Native enrollment, authentication and inventory orchestration are in development
+and are not part of this storage-neutral contract checkpoint.
+
+These are implementation prerequisites, not a complete authentication product.
+The modules remain non-releasable. [Documentation map](docs/index.md).
 
 ## Planned responsibility
 
-The future root package is intended to own storage-neutral passkey policy,
+The root package owns the storage-neutral boundary for passkey policy,
 registration and authentication flows, credential profiles, stable user-handle
 policy, backup state, device labels, account-recovery policy, and coordination
-through caller-supplied resources. Its contracts remain proposals until they
-are implemented, reviewed, verified, and released.
+through caller-supplied resources. Complete workflows, public adoption,
+interoperability and final qualification remain unfinished.
 
 ## Non-goals
 
-The planned root boundary does not own:
+The root boundary does not own:
 
 - WebAuthn wire parsing, cryptographic verification, or ceremony storage;
 - non-discoverable security-key policy or browser user interfaces;
 - identity, risk, authentication, identifier, audit, or session policy; or
 - database clients, migrations, transactions, caches, or background workers.
 
-Those concerns may become separate modules or compose existing Golib packages.
-Their presence in planning material does not make them available here.
+The native adapter must compose actual WebAuthn, identity, risk and session
+owners atomically; it cannot supply a private verifier or transaction engine.
 
 ## Lifecycle and ownership
 
-Implementation, hardening, and release have not started. The current module
-declaration exists only so repository tooling can validate the planned module
-identity, family, ownership, and lifecycle metadata.
+Implementation is in progress. No tagged release or complete authentication
+journey is claimed.
 
-The plan requires caller-owned configuration and runtime resources, copied
+The implementation requires caller-owned configuration and runtime resources, copied
 mutable inputs, context-bounded external operations, and no package-owned
-background work. These are design constraints, not claims about released
-behavior.
+background work. No release follows from these component contracts.
 
 ## Planning and verification
 
 The [repository goal](docs/goal.md) and `modules.json` record the planning scope
-and schema-v2 engineering inventory. Planned lifecycle state excludes this
+and schema-v2 engineering inventory. Non-releasable state excludes this
 module from installable and released consumer catalogs. The local
 `make cohesion` target validates that boundary with the exact checksum-pinned
 `go-library-tools` release declared in `.golib.yaml`.
 
-Passing repository checks proves only that the planning scaffold and metadata
-are internally consistent. It does not prove passkey behavior or an API.
+Passing structural checks does not prove authentication behavior. Root tests
+cover bounded values, lossless copying and diagnostic/serialization custody;
+native composition and consumer journeys remain unpublished work.
 
 Security reports must use the private process, and the planned trust boundary
 and unresolved release-blocking risks are recorded in the
 [security policy](SECURITY.md).
 
-Use Go 1.27.2 and the qualified public Tools v2.1.2 binary; the planned
+Use Go 1.27.2 and the checksum-pinned public Tools binary in `.golib.yaml`; the
 module minimum remains Go 1.27.0. `make check`, `make ci` and `make fast-check`
 validate configuration, repository structure, cohesion, offline specification
 decisions, local documentation links and whole-tree/history secrets.
