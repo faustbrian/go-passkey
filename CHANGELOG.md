@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+- Add neutral keyed self-label update request/result records. They use safe
+  management references and metadata versions, preserve original command
+  ownership through existing keyed admission and require genuine native action
+  custody. Historical retries return no fresh credential metadata or effects.
 - Expose adapter-neutral enrollment, identified/discoverable signin, keyed
   options and inventory data records for optional transports. Existing
   PostgreSQL names remain exact aliases with unchanged field, diagnostic and

@@ -13,6 +13,16 @@ persistence.
 
 ## Current API
 
+- `UpdateRequest`/`UpdateResult` carry keyed self-user label-management intent and
+  original durability metadata without importing a database. Use the safe List
+  reference and its management metadata version, not RP credential bytes or
+  authority versions. This keyed native profile requires empty incoming primary
+  command/record IDs: the existing request-key owner allocates the one original
+  command before genuine `identity.passkey.update` action-proof preparation.
+  That original ID is returned for fresh execution, replay and recovery. Matching
+  retries carry identical custody/input and return metadata only; no proof,
+  mutation or required effect is repeated. Native implementation remains a
+  separate adapter boundary; these records grant no execution authority.
 - Enrollment, identified/discoverable signin, keyed-options and inventory
   request/result records live in the root module for adapter-neutral transport
   ports. The PostgreSQL names are exact aliases, so no conversion is needed.
