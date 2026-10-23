@@ -39,17 +39,19 @@ import (
 // owner's startup opt-in. No signup, completed-MFA or organization profile is
 // enabled.
 type SigninConfig struct {
-	Protocol      webauthn.Config
-	Profile       sessionpg.PasskeyAdmissionConfig
-	Coordinator   kernel.CoordinatorConfig
-	Authorization authorization.Service
-	Clock         clock.Clock
-	Flow          session.PreAuthIssuerConfig
-	Session       session.IssuerConfig
-	CSRF          session.CSRFKey
-	Repository    sessionpg.Config
-	Risk          risk.AuthenticationAdmissionCustodyConfig
-	IdentifierKey []byte
+	// OptionsRequests explicitly enables the additive keyed options APIs only.
+	OptionsRequests OptionsRequestConfig
+	Protocol        webauthn.Config
+	Profile         sessionpg.PasskeyAdmissionConfig
+	Coordinator     kernel.CoordinatorConfig
+	Authorization   authorization.Service
+	Clock           clock.Clock
+	Flow            session.PreAuthIssuerConfig
+	Session         session.IssuerConfig
+	CSRF            session.CSRFKey
+	Repository      sessionpg.Config
+	Risk            risk.AuthenticationAdmissionCustodyConfig
+	IdentifierKey   []byte
 }
 
 // SigninRequest carries original browser flow/cookie, exact owner-canonical
@@ -198,6 +200,16 @@ func NewSigninService(pool *database.Pool, c SigninConfig) (*SigninService, erro
 	s := &SigninService{pool: pool, config: func() SigninConfig { return c }, flow: flow, directory: directory, protocol: protocol, policy: policies, risk: custody, effect: effect}
 	if _, err := session.NewPasskeySessionIssuerWithCSRF(&signinInvocation{}, c.Session, c.CSRF); err != nil {
 		return nil, err
+	}
+	if c.OptionsRequests.state != nil {
+		p := &signinInvocation{Store: protocol, service: s, operation: signinOperation(false)}
+		_, registry, err := p.runtime()
+		if err != nil {
+			return nil, err
+		}
+		if _, err := kernel.NewCoordinatorWithRequestKeys(pool, registry, c.Coordinator, c.OptionsRequests.state().request); err != nil {
+			return nil, err
+		}
 	}
 	return s, nil
 }

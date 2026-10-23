@@ -65,7 +65,14 @@ type enrollmentFixture struct {
 // reauthentication, signed proof, admission, protocol verification and mutation
 // in the selected enrollment operation uses its real public native owner.
 // This is not registration/signin-baseline or complete passkey-session proof.
-func newEnrollmentFixture(t *testing.T) *enrollmentFixture {
+func newEnrollmentFixture(t *testing.T, reauthenticationClock ...func() time.Time) *enrollmentFixture {
+	proofNow := time.Now
+	if len(reauthenticationClock) > 1 || len(reauthenticationClock) == 1 && reauthenticationClock[0] == nil {
+		t.Fatal("invalid native proof fixture clock")
+	}
+	if len(reauthenticationClock) == 1 {
+		proofNow = reauthenticationClock[0]
+	}
 	ctx, db := mappingDatabase(t)
 	pool, err := database.Connect(ctx, database.Config{DSN: os.Getenv("IDENTITY_POSTGRES_TEST_DSN"), MaxConns: 4, Configure: func(c *database.PoolConfig) error { c.ConnConfig.Database = db.Config().Database; return nil }})
 	if err != nil {
@@ -292,7 +299,7 @@ INSERT INTO identity_mfa.factor_authorities VALUES('01ARZ3NDEKTSV4RRFFQ69G5FAV',
 		targets = append(targets, passwordpg.ReauthenticationTarget{Purpose: "identity.password.verify", Action: enrollmentOperation(finish).OperationID, Audience: "passkey-enrollment"})
 	}
 	profile := sessionpg.IdentifierAdmissionConfig{GlobalAuthorityID: "passkey-fixture", PolicyNamespace: "users", Audience: "passkey-fixture", AuthenticationMethod: "password", CredentialKind: identity.CredentialPassword, CredentialOwner: "identity/password"}
-	proofs, err := passwordpg.NewReauthenticationService(pool, passwordpg.ReauthenticationConfig{Repository: passwordpg.Config{MaximumDuration: 5 * time.Second, HashPolicy: primitive.DefaultPolicy()}, Verifier: password.VerifierConfig{Primitive: crypto, MaximumBytes: 128, Timeout: 4 * time.Second, DummyHash: hash, Now: time.Now}, Session: sessionpg.Config{Schema: "session_store", MaximumDuration: time.Second}, Profile: profile, LookupKeys: []session.DigestKey{lookup}, Risk: risk.AuthenticationAdmissionCustodyConfig{Evaluation: evaluator, ConfigurationID: "passkey-verify", Keys: []risk.EvidenceKey{evidence}}, Coordinator: coordinator, SigningKey: signer, VerificationKeys: map[string]ed25519.PublicKey{"fixture": public}, Issuer: "passkey-fixture", Environment: "isolated", Targets: targets, TTL: 5 * time.Minute, IdentifierKey: bytes.Repeat([]byte{36}, 32)})
+	proofs, err := passwordpg.NewReauthenticationService(pool, passwordpg.ReauthenticationConfig{Repository: passwordpg.Config{MaximumDuration: 5 * time.Second, HashPolicy: primitive.DefaultPolicy()}, Verifier: password.VerifierConfig{Primitive: crypto, MaximumBytes: 128, Timeout: 4 * time.Second, DummyHash: hash, Now: proofNow}, Session: sessionpg.Config{Schema: "session_store", MaximumDuration: time.Second}, Profile: profile, LookupKeys: []session.DigestKey{lookup}, Risk: risk.AuthenticationAdmissionCustodyConfig{Evaluation: evaluator, ConfigurationID: "passkey-verify", Keys: []risk.EvidenceKey{evidence}}, Coordinator: coordinator, SigningKey: signer, VerificationKeys: map[string]ed25519.PublicKey{"fixture": public}, Issuer: "passkey-fixture", Environment: "isolated", Targets: targets, TTL: 5 * time.Minute, IdentifierKey: bytes.Repeat([]byte{36}, 32)})
 	if err != nil {
 		t.Fatal(err)
 	}

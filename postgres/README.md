@@ -44,6 +44,41 @@ never another challenge, verified credential, token or permission to replay.
 An unavailable COMMIT acknowledgment is not rollback. Retain original command
 and caller scope; do not mint a new operation to retry an ambiguous mutation.
 
+For keyed HTTP or native options admission, construct `OptionsRequestConfig`
+with `NewOptionsRequestConfig`, the kernel's `RequestKeyConfig`, and dedicated
+independent `session.DigestKey`/`session.CSRFKey` values used only for original
+input correlation. Configure it as `EnrollmentConfig.OptionsRequests` and/or
+`SigninConfig.OptionsRequests`. Install the kernel's public
+`RequestKeyMigrationSource` after the installed kernel history; this adapter
+does not add another journal or correlation table. Keep namespace and digest
+keys fixed while original mappings are retained. The kernel retains immutable
+mappings without expiry; changing keys fails closed instead of silently issuing
+a replacement challenge.
+
+Call `KeyedRegistrationOptions`, `KeyedAuthenticationOptions` or
+`KeyedDiscoverableAuthenticationOptions` with the matching typed request and
+the exact `identity.IdempotencyKey`. Leave its native CommandID empty (and
+registration's RecordID empty); the request-key owner allocates one random
+original command. Preserve the original session/proof/CSRF or flow/cookie and
+all operation input on retries. A fresh acknowledged winner has committed
+`Receipt` metadata and reveal-once `Options`. Matching replays have that same
+`CommandID`, `Replayed=true`, and metadata only, including after proof/flow
+consumption. Pending metadata returns `identity.InProgressError`; an unresolved
+outcome returns `identity.UnknownCommitError`. No error or replay permits a
+challenge transfer or new authentication. A zero receipt establishes no command
+outcome; retry the same key/input rather than minting a replacement.
+
+Current coordinator admission and query policies authorize metadata separately
+from native execution. Enrollment retains trusted authenticated self-user
+attribution; signin retains the configured service actor and exact browser
+possession. Signin metadata policy uses `identity.anonymous-flow`/FlowID, the
+kernel query owner's required resource, while native execution uses
+`identity.preauth`. The request-key owner independently requires
+`identity.request-admission` with the canonical options operation ID. The
+adapter selects only that resource for the admission decision, not a new actor
+or authorization service. Existing keyless methods and one-use completion
+methods retain their prior contracts.
+
 `NewInventoryService` composes an explicitly selected native password or passkey
 session reader, self-user authorization and the existing risk safe-read counters.
 `List` returns at most 100 safe metadata rows, with an exclusive reference-ID

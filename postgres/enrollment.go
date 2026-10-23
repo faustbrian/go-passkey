@@ -32,6 +32,8 @@ import (
 // attempts through this command, not a separate workflow. Apply the actual
 // kernel/password/MFA/risk/WebAuthn/audit/outbox and passkey histories first.
 type EnrollmentConfig struct {
+	// OptionsRequests explicitly enables the additive keyed options API only.
+	OptionsRequests                   OptionsRequestConfig
 	Protocol                          webauthn.Config
 	RPNamespace                       string
 	Coordinator                       kernel.CoordinatorConfig
@@ -127,7 +129,18 @@ func NewEnrollmentService(pool *database.Pool, c EnrollmentConfig) (*EnrollmentS
 	if err != nil {
 		return nil, err
 	}
-	return &EnrollmentService{pool: pool, config: func() EnrollmentConfig { return c }, directory: directory, protocol: protocol}, nil
+	s := &EnrollmentService{pool: pool, config: func() EnrollmentConfig { return c }, directory: directory, protocol: protocol}
+	if c.OptionsRequests.state != nil {
+		p := &enrollmentInvocation{Store: protocol, service: s, source: c.OptionsSource, operation: enrollmentOperation(false)}
+		_, registry, err := s.runtime(p)
+		if err != nil {
+			return nil, err
+		}
+		if _, err := kernel.NewCoordinatorWithRequestKeys(pool, registry, c.Coordinator, c.OptionsRequests.state().request); err != nil {
+			return nil, err
+		}
+	}
+	return s, nil
 }
 
 func enrollmentOperation(finish bool) identity.FeatureOperation {

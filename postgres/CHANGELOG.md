@@ -2,6 +2,13 @@
 
 ## Unreleased
 
+- Add opt-in keyed native registration and identified/discoverable signin
+  options through the existing kernel request-key and recovery owners.
+  Exact original input and browser/session possession retain one random
+  command; matching retries return metadata only, never another challenge.
+  Configure dedicated correlation digest keys and install the kernel's
+  request-key history before enabling the additive APIs. Existing keyless
+  methods and one-use completion semantics remain unchanged.
 - Add explicitly selected identifier-free resident UV/ES256 signin with genuinely
   account-independent options and the risk owner's trusted anonymous-profile
   opt-in. The root-verified credential and opaque handle jointly select the
