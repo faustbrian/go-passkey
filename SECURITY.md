@@ -2,10 +2,11 @@
 
 ## Supported versions
 
-There are no supported releases. This checkpoint provides experimental root
-handle/label contracts only. Native PostgreSQL workflow work is unpublished;
-complete passkey authentication is not available. The root remains
-non-releasable; full workflow/security boundaries must be proven before release.
+There are no supported releases. Experimental root handle/label contracts and
+native existing-account enrollment, identified signin, safe inventory and
+session-authority composition are implemented. They are not a complete passkey
+platform. Both modules remain non-releasable; full workflow/security boundaries
+and public-consumer qualification must be proven before release.
 
 ## Private reporting
 
@@ -27,10 +28,10 @@ authentication flows, credential profiles, stable opaque user-handle policy,
 backup state, device labels, credential lifecycle, passkey-first decisions, and
 account-recovery coordination. It must not implement WebAuthn wire parsing or
 cryptographic verification, retain ceremony state, render browser interfaces,
-issue sessions, or own persistence and infrastructure resources. The planned
-native PostgreSQL adapter must own identity-facing mappings, not protocol
-records or an independent factor/session authority; it is not delivered by
-this root-contract checkpoint.
+issue sessions, or own persistence and infrastructure resources. The native
+PostgreSQL adapter owns identity-facing mappings and composes the actual
+protocol, factor, identity, risk and session owners. It does not own protocol
+records or an independent factor/session authority.
 
 The caller and composed WebAuthn implementation remain responsible for HTTPS,
 origin and relying-party binding, challenge entropy and single use, ceremony

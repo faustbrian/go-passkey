@@ -62,7 +62,12 @@ planning acceptance only. They do not run experimental Go implementation tests
 or establish runtime conformance, complete mutation qualification or releasable
 module readiness. No release is authorized by a green planning check.
 
-For the root implementation, keep the disposable Go environment above and run
-`GOWORK=off go test -race .`. Root hostile-boundary fuzz targets cover opaque
-handles and bounded UTF-8 labels. Native workflow composition, public consumer
-adoption and full release qualification remain separate unfinished work.
+For implementation checks, keep the disposable Go environment above and run
+`go test -race . ./postgres` in this repository's checked-in workspace. Native
+integration tests additionally require an explicitly selected disposable local
+PostgreSQL database via `IDENTITY_POSTGRES_TEST_DSN`; they create/drop their own
+isolated per-test databases and fresh audit roles. Never point them at an
+existing service or database. Run the affected journey with
+`go test -race -tags=integration -run '<selected test>' ./postgres`.
+The implementation is not a release-qualified platform; full scope, external
+public-consumer and interoperability proof remain independently required.

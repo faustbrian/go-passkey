@@ -1,7 +1,8 @@
 # go-passkey
 
-> **Experimental, incomplete and unreleased.** Component APIs exist, but the
-> complete passkey enrollment/signin/session workflow is not available yet.
+> **Experimental, incomplete and unreleased.** Selected native existing-account
+> enrollment, identified signin and session APIs exist. Passkey-first signup,
+> discoverable login, complete management and platform qualification remain work.
 
 `go-passkey` implements the Golib boundary for identity-facing passkey
 enrolment, discoverable credentials, passwordless signup and sign-in, synced
@@ -21,8 +22,11 @@ persistence.
 - `NewDeviceLabel` preserves bounded UTF-8 display text. A label is not device
   identity, authenticator provenance or authorization. Escape its explicitly
   projected text for the output medium.
-Native enrollment, authentication and inventory orchestration are in development
-and are not part of this storage-neutral contract checkpoint.
+- The [PostgreSQL module](postgres/README.md) owns RP-wide mappings and current
+  passkey session authority through the existing kernel and MFA owners. Its
+  experimental APIs compose fresh-proof enrollment, identified login and safe
+  inventory with actual protocol, risk and session owners. Public-consumer
+  qualification and complete independent workflow review remain unfinished.
 
 These are implementation prerequisites, not a complete authentication product.
 The modules remain non-releasable. [Documentation map](docs/index.md).
@@ -64,9 +68,9 @@ module from installable and released consumer catalogs. The local
 `make cohesion` target validates that boundary with the exact checksum-pinned
 `go-library-tools` release declared in `.golib.yaml`.
 
-Passing structural checks does not prove authentication behavior. Root tests
-cover bounded values, lossless copying and diagnostic/serialization custody;
-native composition and consumer journeys remain unpublished work.
+Passing structural checks does not prove authentication behavior. Focused
+native tests cover bounded values, real mapping constraints and owner checks;
+full protocol/workflow composition and consumer journeys remain required.
 
 Security reports must use the private process, and the planned trust boundary
 and unresolved release-blocking risks are recorded in the

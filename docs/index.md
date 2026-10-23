@@ -8,6 +8,7 @@ the complete identity-facing passkey workflow remains unfinished.
 ## Choose and adopt
 
 - [Goal: go-passkey implementation](goal.md).
+- [PostgreSQL mappings and current authority](../postgres/README.md).
 
 ## Related next steps
 

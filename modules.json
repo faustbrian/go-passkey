@@ -131,6 +131,163 @@
         "security": false,
         "tests": false
       }
+    },
+    {
+      "directory": "postgres",
+      "module_path": "github.com/faustbrian/go-passkey/postgres",
+      "go_version": "1.27.0",
+      "packages": [
+        {
+          "module_directory": "postgres",
+          "directory": ".",
+          "name": "postgres",
+          "import_path": "github.com/faustbrian/go-passkey/postgres",
+          "kind": "public",
+          "production": true,
+          "executable": true,
+          "coverage_required": true,
+          "build_required": true,
+          "build_tags": []
+        }
+      ],
+      "purpose": "Experimental existing-account passkey enrollment, identified signin, safe inventory and current session authority through the existing owned protocol, risk and identity/session coordinators.",
+      "lifecycle": "experimental",
+      "kind": "public library",
+      "releasable": false,
+      "family": "service-edge",
+      "family_label": "Service Edge",
+      "family_description": "Request-edge policy, identity, access decisions, routing, middleware, and process lifecycle.",
+      "family_order": 2,
+      "version": "0.0.0",
+      "tag_prefix": "postgres/v",
+      "owned_dependencies": [
+        "github.com/faustbrian/go-audit",
+        "github.com/faustbrian/go-audit/postgres",
+        "github.com/faustbrian/go-authentication/v2",
+        "github.com/faustbrian/go-authorization/v3",
+        "github.com/faustbrian/go-clock",
+        "github.com/faustbrian/go-identity",
+        "github.com/faustbrian/go-identity/mfa/postgres",
+        "github.com/faustbrian/go-identity/password",
+        "github.com/faustbrian/go-identity/password/postgres",
+        "github.com/faustbrian/go-identity/postgres",
+        "github.com/faustbrian/go-identity/risk",
+        "github.com/faustbrian/go-identity/risk/postgres",
+        "github.com/faustbrian/go-identity/session",
+        "github.com/faustbrian/go-identity/session/postgres",
+        "github.com/faustbrian/go-migrations/v3",
+        "github.com/faustbrian/go-passkey",
+        "github.com/faustbrian/go-password/v2",
+        "github.com/faustbrian/go-postgres",
+        "github.com/faustbrian/go-transactional-outbox/postgres/identity",
+        "github.com/faustbrian/go-transactional-outbox/v2",
+        "github.com/faustbrian/go-webauthn",
+        "github.com/faustbrian/go-webauthn/postgres"
+      ],
+      "reverse_owned_dependencies": [],
+      "external_runtime_dependencies": [
+        "github.com/jackc/pgx/v5"
+      ],
+      "required_services": [
+        "postgresql"
+      ],
+      "build_tags": [],
+      "test_tags": [
+        "integration"
+      ],
+      "interoperability_tools": [],
+      "specifications": [],
+      "conformance_corpora": [],
+      "provenance": [],
+      "goal_files": [
+        "docs/goal.md"
+      ],
+      "goal_status": "in-progress",
+      "goal_evidence": [],
+      "cohesion": {
+        "family": "service-edge",
+        "secondary_capabilities": [
+          "identity-and-access"
+        ],
+        "responsibility": "Own RP-wide identity-to-credential mappings, opaque handles, labels and current passkey authority through the existing identity coordinator.",
+        "non_goals": [
+          "Own WebAuthn protocol parsing, keys, counters, ceremonies, session persistence or a private transaction engine.",
+          "Claim complete passkey authentication or release qualification."
+        ],
+        "public_package_identifier": "postgres",
+        "primary_entry_packages": [
+          "github.com/faustbrian/go-passkey/postgres"
+        ],
+        "package_selection": {
+          "github.com/faustbrian/go-passkey/postgres": "Selected existing-account enrollment, identified signin and safe inventory; full passkey and release qualification remain incomplete."
+        },
+        "lifecycle_status": "active",
+        "maturity": "experimental",
+        "construction_styles": [
+          "new-config"
+        ],
+        "lifecycle_styles": [
+          "stateless"
+        ],
+        "ownership": {
+          "configuration": "caller",
+          "mutable_inputs": [
+            "borrow",
+            "copy"
+          ],
+          "runtime_resources": "caller",
+          "background_work": "none"
+        },
+        "optional_owned_dependencies": [],
+        "adapters": [],
+        "companions": [],
+        "supported_go": {
+          "minimum": "1.27.0",
+          "tested": [
+            "1.27.2"
+          ]
+        },
+        "supported_platforms": [
+          "portable-go"
+        ],
+        "supported_backends": [
+          "postgresql"
+        ],
+        "supported_protocols": [],
+        "documentation": {
+          "readme": "postgres/README.md",
+          "api": "postgres/README.md",
+          "adoption": "postgres/README.md",
+          "security": "SECURITY.md",
+          "compatibility": null,
+          "performance": null,
+          "examples": "postgres/session_authority_integration_test.go",
+          "faq": null,
+          "changelog": "postgres/CHANGELOG.md",
+          "pkg_go_dev": "https://pkg.go.dev/github.com/faustbrian/go-passkey/postgres",
+          "ecosystem_index": "https://github.com/faustbrian/go-library-tools/blob/v1.8.4/docs/ecosystem/README.md"
+        },
+        "known_good_compatibility_sets": [],
+        "delivery": {
+          "implementation": "in-progress",
+          "hardening": "in-progress",
+          "release": "blocked"
+        }
+      },
+      "gates": {
+        "api_compatibility": false,
+        "benchmarks": false,
+        "conformance": false,
+        "coverage": false,
+        "documentation": true,
+        "fuzz": false,
+        "interoperability": false,
+        "lint": false,
+        "mutation": false,
+        "race": false,
+        "security": false,
+        "tests": false
+      }
     }
   ]
 }
