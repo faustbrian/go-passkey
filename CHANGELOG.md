@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+- Add neutral keyed self-deletion request/result records. They preserve original
+  signed-action/session custody and safe management versions; native removal
+  requires current recovery authority. Results carry durability metadata only,
+  never reauthentication material or a credential projection.
 - Add neutral keyed self-label update request/result records. They use safe
   management references and metadata versions, preserve original command
   ownership through existing keyed admission and require genuine native action

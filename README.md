@@ -13,6 +13,14 @@ persistence.
 
 ## Current API
 
+- `DeleteRequest`/`DeleteResult` carry keyed self-user removal intent and original
+  durability metadata only. Use the safe List reference and metadata version,
+  leave primary command/record IDs empty and preserve exact input/custody on
+  retries. Native execution must require genuine `identity.passkey.delete`
+  proof and current usable recovery authority, then remove protocol/reference
+  authority and emit required lifecycle effects atomically. The records grant
+  no authority, return no credentials and do not claim authenticator-local
+  erasure; matching retries recover metadata without repeating effects.
 - `UpdateRequest`/`UpdateResult` carry keyed self-user label-management intent and
   original durability metadata without importing a database. Use the safe List
   reference and its management metadata version, not RP credential bytes or
