@@ -13,6 +13,19 @@ persistence.
 
 ## Current API
 
+- Enrollment, identified/discoverable signin, keyed-options and inventory
+  request/result records live in the root module for adapter-neutral transport
+  ports. The PostgreSQL names are exact aliases, so no conversion is needed.
+  Their established diagnostic labels and serialization errors are unchanged;
+  reflection reports `github.com/faustbrian/go-passkey` as their defining
+  package. `RegistrationRequest.Primary` is the password owner's neutral
+  `password.ActionPrimaryRequest`. These data records select no database,
+  configuration, runtime store or transport.
+- `CeremonyRateSource` carries only an original ceremony ID, immutable original
+  policy lifetime and one user, identifier or anonymous-flow rate dimension.
+  It is sensitive metadata, not an authentication result or validity lease.
+  Consumed historical metadata cannot authorize another native mutation or
+  reveal. Implicit JSON/text serialization and ordinary diagnostics redact it.
 - `UserHandlePolicy.Generate` creates a random opaque 32-byte handle for first
   enrollment. Persist and reuse the first committed identity/RP mapping; never
   regenerate an existing handle on ordinary reads or retries.
