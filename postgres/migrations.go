@@ -4,6 +4,7 @@ package postgres
 
 import (
 	"context"
+	"math"
 
 	identity "github.com/faustbrian/go-identity"
 	migrations "github.com/faustbrian/go-migrations/v3"
@@ -31,6 +32,37 @@ func (MigrationSource) Load(ctx context.Context) ([]migrations.Migration, error)
 	}
 	return []migrations.Migration{step}, nil
 }
+
+// MetadataVersionMigrationSource appends safe-label optimistic versioning to
+// the actual installed mapping/signin history without reallocating its slots.
+// Version is a permanent free slot greater than one; deployments with mapping1
+// and signin2 select three. Existing migration bytes, names and checksums must
+// remain installed unchanged. Inventory and management require this suffix.
+// It performs no IO and owns no runner, transaction or resource lifetime.
+type MetadataVersionMigrationSource struct{ Version migrations.Version }
+
+// Load returns one forward-only transactional suffix for an explicitly allocated
+// free version. Allocation is validated by the actual owner's combined runner;
+// this source does not inspect or reinterpret an installed ledger.
+func (s MetadataVersionMigrationSource) Load(ctx context.Context) ([]migrations.Migration, error) {
+	if ctx == nil || s.Version <= 1 || s.Version > migrations.Version(math.MaxInt64) {
+		return nil, identity.InvalidInputError{Field: "passkey_metadata_migration"}
+	}
+	if err := ctx.Err(); err != nil {
+		return nil, err
+	}
+	metadata, err := migrations.NewMigration(s.Version, "identity_passkey_metadata_versions", migrations.TransactionModeDefault, metadataVersionSQL, "")
+	if err != nil {
+		return nil, identity.UnavailableError{}
+	}
+	return []migrations.Migration{metadata}, nil
+}
+
+// The released version column is an exact kernel credential-reference fence.
+// Metadata CAS must not change it: doing so would disable otherwise unchanged
+// protocol credentials in existing signin consumers. Preserve the installed v1
+// migration byte-for-byte and backfill existing safe inventory records to one.
+const metadataVersionSQL = `ALTER TABLE identity_passkey.credentials ADD COLUMN metadata_version identity.version NOT NULL DEFAULT 1;`
 
 // RP-wide uniqueness deliberately excludes tenant: a shared RP must never
 // disambiguate a credential or opaque handle by a browser-selected tenant.

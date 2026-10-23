@@ -2,6 +2,19 @@
 
 ## Unreleased
 
+- Add keyed self-user passkey label rename through a genuine fresh signed
+  update action proof and the existing request-key/coordinator owners. Safe
+  reference IDs and expected metadata versions bind one original command;
+  matching retries return metadata only. Proof consumption, current authority,
+  mutation risk, label CAS and exact required rename audit/outbox effects share
+  one Work. Install the password management proof suffix, request-key history
+  and explicitly allocated `MetadataVersionMigrationSource` before enabling
+  this API or updated inventory. Preserve installed mapping/signin histories;
+  append the next free version (3 after mapping1/signin2). Inventory versions
+  now track label metadata separately from unchanged authenticating credential
+  versions; old signin remains compatible, while inventory readers need the
+  updated projection after a rename.
+
 - Retain existing transport data names as exact root-module aliases, including
   the password owner's adapter-neutral primary request. Fields, native method
   signatures, diagnostic labels and serialization errors remain compatible;

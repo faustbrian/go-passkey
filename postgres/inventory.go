@@ -175,7 +175,7 @@ func (s *InventoryService) List(ctx context.Context, r InventoryRequest) (Invent
 	if evaluation.Signal.State != risk.SignalClean {
 		return InventoryPage{}, identity.ForbiddenError{}
 	}
-	rows, err := s.pool.Raw().Query(bounded, `SELECT c.reference_id,c.credential_id,c.version::text,c.state,COALESCE(c.display_label,''),c.created_at,c.last_used_at FROM identity_passkey.credentials c JOIN identity_passkey.relying_parties p USING(rp_namespace) WHERE c.rp_namespace=$1 AND p.rp_id=$2 AND c.tenant_id=$3 AND c.user_id=$4 AND c.reference_id>$5 ORDER BY c.reference_id LIMIT $6`, c.RPNamespace, c.RPID, string(c.TenantID), string(spec.UserID), r.After, r.Limit+1)
+	rows, err := s.pool.Raw().Query(bounded, `SELECT c.reference_id,c.credential_id,c.metadata_version::text,c.state,COALESCE(c.display_label,''),c.created_at,c.last_used_at FROM identity_passkey.credentials c JOIN identity_passkey.relying_parties p USING(rp_namespace) WHERE c.rp_namespace=$1 AND p.rp_id=$2 AND c.tenant_id=$3 AND c.user_id=$4 AND c.reference_id>$5 ORDER BY c.reference_id LIMIT $6`, c.RPNamespace, c.RPID, string(c.TenantID), string(spec.UserID), r.After, r.Limit+1)
 	if err != nil {
 		if bounded.Err() != nil {
 			return InventoryPage{}, bounded.Err()

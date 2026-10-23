@@ -100,9 +100,11 @@ func newEnrollmentFixture(t *testing.T, reauthenticationClock ...func() time.Tim
 	base := kernel.DirectoryAuthorityMigrationSource{Base: kernel.AnonymousIdentityMigrationSource{Base: kernel.IdentifierNormalizationMigrationSource{Base: kernel.IdentifierMutationMigrationSource{Base: kernel.CredentialMigrationSource{Base: kernel.StatusMigrationSource{Base: kernel.MigrationSource{}, Version: 10}, Version: 11}, Version: 12}, Version: 13}, Version: 14}, Version: 15, GlobalAuthorityID: "passkey-fixture", TenantIDs: []identity.TenantID{"01ARZ3NDEKTSV4RRFFQ69G5FAV"}}
 	apply(base)
 	apply(sessionpg.MigrationSource{Schema: "session_store", Version: 1})
-	apply(passwordpg.PasskeyReauthenticationMigrationSource{Base: passwordpg.ActionReauthenticationMigrationSource{Base: passwordpg.EmailReauthenticationMigrationSource{}, Version: 10}, Version: 11})
+	apply(passwordpg.PasskeyManagementReauthenticationMigrationSource{Base: passwordpg.PasskeyReauthenticationMigrationSource{Base: passwordpg.ActionReauthenticationMigrationSource{Base: passwordpg.EmailReauthenticationMigrationSource{}, Version: 10}, Version: 11}, Version: 12})
 	apply(mfapg.MigrationSource{Version: 1})
 	apply(MigrationSource{})
+	apply(SigninMigrationSource{Version: 2})
+	apply(MetadataVersionMigrationSource{Version: 3})
 	apply(webauthnpg.MigrationSource{})
 	apply(riskpg.LockoutMigrationSource{Base: riskpg.CounterMigrationSource{Base: riskpg.ReservationMigrationSource{Base: riskpg.IssuanceIDMigrationSource{Base: riskpg.MigrationSource{Schema: "passkey_risk", Version: 1}, Version: 2}, Version: 3}, Version: 4}, Version: 5})
 	apply(riskpg.DurableCounterMigrationSource{Schema: "passkey_admission", Version: 1})
@@ -298,6 +300,7 @@ INSERT INTO identity_mfa.factor_authorities VALUES('01ARZ3NDEKTSV4RRFFQ69G5FAV',
 	for _, finish := range []bool{false, true} {
 		targets = append(targets, passwordpg.ReauthenticationTarget{Purpose: "identity.password.verify", Action: enrollmentOperation(finish).OperationID, Audience: "passkey-enrollment"})
 	}
+	targets = append(targets, passwordpg.ReauthenticationTarget{Purpose: "identity.password.verify", Action: "identity.passkey.update", Audience: "passkey-enrollment"})
 	profile := sessionpg.IdentifierAdmissionConfig{GlobalAuthorityID: "passkey-fixture", PolicyNamespace: "users", Audience: "passkey-fixture", AuthenticationMethod: "password", CredentialKind: identity.CredentialPassword, CredentialOwner: "identity/password"}
 	proofs, err := passwordpg.NewReauthenticationService(pool, passwordpg.ReauthenticationConfig{Repository: passwordpg.Config{MaximumDuration: 5 * time.Second, HashPolicy: primitive.DefaultPolicy()}, Verifier: password.VerifierConfig{Primitive: crypto, MaximumBytes: 128, Timeout: 4 * time.Second, DummyHash: hash, Now: proofNow}, Session: sessionpg.Config{Schema: "session_store", MaximumDuration: time.Second}, Profile: profile, LookupKeys: []session.DigestKey{lookup}, Risk: risk.AuthenticationAdmissionCustodyConfig{Evaluation: evaluator, ConfigurationID: "passkey-verify", Keys: []risk.EvidenceKey{evidence}}, Coordinator: coordinator, SigningKey: signer, VerificationKeys: map[string]ed25519.PublicKey{"fixture": public}, Issuer: "passkey-fixture", Environment: "isolated", Targets: targets, TTL: 5 * time.Minute, IdentifierKey: bytes.Repeat([]byte{36}, 32)})
 	if err != nil {
@@ -329,13 +332,18 @@ INSERT INTO identity_mfa.factor_authorities VALUES('01ARZ3NDEKTSV4RRFFQ69G5FAV',
 func (f *enrollmentFixture) request(t *testing.T, finish bool) RegistrationRequest {
 	t.Helper()
 	op := enrollmentOperation(finish)
+	return f.actionRequest(t, op.OperationID)
+}
+
+func (f *enrollmentFixture) actionRequest(t *testing.T, action string) RegistrationRequest {
+	t.Helper()
 	secret, err := primitive.NewSecret([]byte(fixturePassword))
 	if err != nil {
 		t.Fatal(err)
 	}
 	defer secret.Destroy()
 	caller := authorization.DecisionContext{PolicyRevision: 1, CorrelationID: "passkey-consumer", Request: authorization.Request{Subject: authorization.Subject{Kind: authorization.SubjectUser, ID: "01ARZ3NDEKTSV4RRFFQ69G5FAW"}, Tenant: "01ARZ3NDEKTSV4RRFFQ69G5FAV", Action: "identity.password.verify", Resource: authorization.Resource{Type: "identity.request-admission", ID: "identity.password.verify"}}}
-	proof, err := f.proofs.Verify(f.ctx, passwordpg.ReauthenticationRequest{TenantID: "01ARZ3NDEKTSV4RRFFQ69G5FAV", Session: f.bearer, Password: secret, Target: passwordpg.ReauthenticationTarget{Purpose: "identity.password.verify", Action: op.OperationID, Audience: "passkey-enrollment"}, Caller: caller, Network: "127.0.0.1", Device: "passkey-browser"})
+	proof, err := f.proofs.Verify(f.ctx, passwordpg.ReauthenticationRequest{TenantID: "01ARZ3NDEKTSV4RRFFQ69G5FAV", Session: f.bearer, Password: secret, Target: passwordpg.ReauthenticationTarget{Purpose: "identity.password.verify", Action: action, Audience: "passkey-enrollment"}, Caller: caller, Network: "127.0.0.1", Device: "passkey-browser"})
 	if err != nil || proof.Outcome != identity.CommitOutcomeCommitted || proof.Proof == (auth.ReauthenticationProof{}) {
 		t.Fatal("genuine native action proof", err)
 	}
@@ -343,7 +351,7 @@ func (f *enrollmentFixture) request(t *testing.T, finish bool) RegistrationReque
 	if err != nil {
 		t.Fatal(err)
 	}
-	caller.Request.Action = authorization.Action(op.OperationID)
+	caller.Request.Action = authorization.Action(action)
 	caller.Request.Resource = authorization.Resource{Type: "identity.user", ID: "01ARZ3NDEKTSV4RRFFQ69G5FAW"}
 	return RegistrationRequest{Primary: passwordpg.ActionPrimaryRequest{TenantID: "01ARZ3NDEKTSV4RRFFQ69G5FAV", CommandID: id, Session: f.bearer, Proof: proof.Proof, Caller: caller}, Origin: "https://identity.example", Network: "127.0.0.1", Device: "passkey-browser"}
 }

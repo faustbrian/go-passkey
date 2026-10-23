@@ -159,7 +159,6 @@ func newSigninFixtureForEnrolledAccountProfile(t *testing.T, f *enrollmentFixtur
 	apply(sessionpg.PreAuthIssueMigrationSource{Schema: "session_store", Version: 5})
 	apply(sessionpg.CSRFMigrationSource{Schema: "session_store", Version: 6})
 	apply(sessionpg.PasskeySigninMigrationSource{Schema: "session_store", Version: 7, PreviousConstraint: "session_issuances_purpose_check"})
-	apply(SigninMigrationSource{Version: 2})
 	if _, err := f.pool.Raw().Exec(f.ctx, `INSERT INTO identity.identifiers(tenant_id,user_id,identifier_id,kind,canonical_value,verified,is_primary,version,verification_state,verification_version,verified_at) VALUES('01ARZ3NDEKTSV4RRFFQ69G5FAV','01ARZ3NDEKTSV4RRFFQ69G5FAW','signin-email','email','passkey@example.test',true,true,1,2,1,clock_timestamp())`); err != nil {
 		t.Fatal(err)
 	}

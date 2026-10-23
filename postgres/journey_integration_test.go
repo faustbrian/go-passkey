@@ -28,8 +28,15 @@ func TestPasskeyEnrollmentSigninInventoryReadAndCookieLogout(t *testing.T) {
 	passkeyJourneyReadInventoryLogout(t, f, issued)
 }
 
-func passkeyJourneyReadInventoryLogout(t *testing.T, f *signinFixture, issued SigninResult) {
+func passkeyJourneyReadInventoryLogout(t *testing.T, f *signinFixture, issued SigninResult, expectedLabels ...string) {
 	t.Helper()
+	expectedLabel := "Signin key"
+	if len(expectedLabels) > 1 {
+		t.Fatal("invalid journey label fixture")
+	}
+	if len(expectedLabels) == 1 {
+		expectedLabel = expectedLabels[0]
+	}
 	reader, profile, authority, input := passkeyJourneyReader(t, f, issued)
 	accepted, err := reader.Get(f.ctx, input)
 	if err != nil || !accepted.Authenticated || accepted.ValidateAt(time.Now().UTC()) != nil {
@@ -48,7 +55,7 @@ func passkeyJourneyReadInventoryLogout(t *testing.T, f *signinFixture, issued Si
 	caller := authorization.DecisionContext{PolicyRevision: 1, CorrelationID: "passkey-journey", Request: authorization.Request{Subject: authorization.Subject{Kind: authorization.SubjectUser, ID: authorization.SubjectID(spec.UserID)}, Tenant: authorization.TenantID(spec.TenantID), Action: "identity.passkey.list", Resource: authorization.Resource{Type: "identity.user", ID: authorization.ResourceID(spec.UserID)}}}
 	listing := InventoryRequest{Credential: input.Credential, Caller: caller, AttemptID: attempt, Limit: 10}
 	page, err := inventory.List(f.ctx, listing)
-	if err != nil || len(page.Credentials) != 1 || page.Credentials[0].LastUsedAt == nil || page.Credentials[0].Label != "Signin key" {
+	if err != nil || len(page.Credentials) != 1 || page.Credentials[0].LastUsedAt == nil || page.Credentials[0].Label != expectedLabel {
 		t.Fatal("passkey-authenticated safe inventory", err)
 	}
 

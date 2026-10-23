@@ -112,6 +112,46 @@ cursor; an owner failure returns no partial page. AAGUID and backup flags come
 from the protocol owner, not another key/counter store. Raw credential IDs,
 handles, keys, counters and authentication custody are never exported.
 
+`NewManagementService` selects self-user label rename with a genuine fresh
+signed `identity.passkey.update` action proof. Configure its concrete password
+session reader, exact proof source/audience, trusted tenant/RP, existing risk
+owner and coordinator admission/query policies. Install the password owner's
+`PasskeyManagementReauthenticationMigrationSource` after the complete installed
+passkey enrollment proof history, the kernel's request-key history and this
+adapter's explicitly allocated `MetadataVersionMigrationSource` before enabling
+it or using updated inventory. Preserve mapping `MigrationSource` version1 and
+any installed `SigninMigrationSource` version2 unchanged; append metadata at
+the actual next free slot (version3 for that history), never reuse signin's slot.
+The forward suffix adds `metadata_version`, backfilling existing records to one. Safe inventory
+`Version` is now this metadata CAS, not the kernel credential-reference fence.
+Protocol credential bytes, counters and authenticating reference versions do
+not change when a label changes; old signin consumers remain compatible. Old
+inventory readers can return stale versions after a rename and must be upgraded
+to obtain the current metadata version.
+
+Call `Update` with root `passkey.UpdateRequest`, the safe inventory ReferenceID,
+positive ExpectedVersion, a 1..128-byte UTF-8 label, exact typed IdempotencyKey
+and trusted bounded Network dimension. Leave Primary.CommandID and RecordID
+empty: the existing request-key owner allocates and binds the original command
+before proof preparation. This native keyed profile does not accept a second
+caller-selected command or a raw WebAuthn credential ID. Keep request namespace,
+dedicated token/CSRF digest keys and all original input fixed across retries.
+Matching retries authenticate the original current self session, retain the
+original command and return historical receipt metadata only, even after proof
+consumption or expiry. Another key cannot reuse a consumed/expired proof.
+
+One sole Work consumes the signed proof, fences current session/account/factor,
+authorization and exact RP credential ownership, charges owned mutation risk,
+CAS-updates label/metadata version and persists required
+`identity.passkey.rename_credential` audit/outbox effects. A concurrent stale
+version cannot overwrite the winner. Only a fresh acknowledged commit returns
+`Credential`; every replay/unknown returns no updated credential projection.
+An unavailable commit acknowledgment is not rollback: retry the exact original
+key/input to use the existing coordinator's retained receipt/recovery policy.
+Changed or contradictory recovery evidence stays unknown, never reconstructed
+as success from current label state. This API does not delete a credential or
+alter recovery eligibility and does not expose HTTP routes.
+
 `NewSigninService` composes UV/ES256 login. First use `PrepareFlow` and
 `IssueFlow` to retain the real session-owned browser cookie and remember choice;
 then pass that original flow to `AuthenticationOptions` and `Signin`. Trusted
@@ -166,5 +206,5 @@ fixture input, not evidence of signup/signin provenance. External public-
 consumer qualification, independent final review and full release
 qualification remain unfinished. The selected flows do not enable
 passkey-first signup, completed MFA, organization authority,
-rename/delete, HTTP/reference routes or a UI. Those retained goals remain work;
+deletion, HTTP/reference routes or a UI. Those retained goals remain work;
 no complete authentication backend is claimed by this adapter yet.

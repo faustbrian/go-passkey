@@ -9,16 +9,16 @@ require (
 	github.com/faustbrian/go-authorization/v3 v3.0.1-0.20261015052455-a55bbebb1060
 	github.com/faustbrian/go-clock v1.2.0
 	github.com/faustbrian/go-identity v0.0.0-20261021021214-46ae60703809
-	github.com/faustbrian/go-identity/mfa/postgres v0.0.0-20261023151855-1d7a572f1afa
+	github.com/faustbrian/go-identity/mfa/postgres v0.0.0-20261023205134-14c2b7df99f1
 	github.com/faustbrian/go-identity/password v0.0.0-20261023192729-324d7aeea43e
-	github.com/faustbrian/go-identity/password/postgres v0.0.0-20261023193300-358f9c9f1efc
+	github.com/faustbrian/go-identity/password/postgres v0.0.0-20261023204138-d618c1a3d5e7
 	github.com/faustbrian/go-identity/postgres v0.0.0-20261023160159-9a09aa4a9171
 	github.com/faustbrian/go-identity/risk v0.0.0-20261023181921-a13a6825051c
 	github.com/faustbrian/go-identity/risk/postgres v0.0.0-20261023150127-219499bdccd5
 	github.com/faustbrian/go-identity/session v0.0.0-20261023150127-219499bdccd5
 	github.com/faustbrian/go-identity/session/postgres v0.0.0-20261023150127-219499bdccd5
 	github.com/faustbrian/go-migrations/v3 v3.1.1-0.20261015110643-ca105f265cfc
-	github.com/faustbrian/go-passkey v0.0.0-20261023194522-8c3a70327962
+	github.com/faustbrian/go-passkey v0.0.0-20261023204144-43285aca38b3
 	github.com/faustbrian/go-password/v2 v2.0.2-0.20261015050515-4eb0fefa60ff
 	github.com/faustbrian/go-postgres v1.1.1-0.20260912090843-61261695bcc7
 	github.com/faustbrian/go-transactional-outbox/postgres/identity v0.0.0-20261020135213-493107bf82af
@@ -46,7 +46,11 @@ require (
 	github.com/jackc/pgpassfile v1.0.0 // indirect
 	github.com/jackc/pgservicefile v0.0.0-20240606120523-5a60cdf6a761 // indirect
 	github.com/jackc/puddle/v2 v2.2.2 // indirect
+	github.com/mfridman/interpolate v0.0.2 // indirect
 	github.com/nyaruka/phonenumbers/v2 v2.0.14 // indirect
+	github.com/pressly/goose/v3 v3.28.0 // indirect
+	github.com/sethvargo/go-retry v0.4.0 // indirect
+	go.uber.org/multierr v1.11.0 // indirect
 	golang.org/x/crypto v0.57.0 // indirect
 	golang.org/x/net v0.59.0 // indirect
 	golang.org/x/sync v0.23.0 // indirect

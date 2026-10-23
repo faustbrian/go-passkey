@@ -12,9 +12,115 @@ import (
 	"time"
 
 	kernel "github.com/faustbrian/go-identity/postgres"
+	migrations "github.com/faustbrian/go-migrations/v3"
+	migrationpg "github.com/faustbrian/go-migrations/v3/postgres"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgconn"
+	"github.com/jackc/pgx/v5/stdlib"
 )
+
+type managementMigrationHistory []migrations.Migration
+
+func (s managementMigrationHistory) Load(ctx context.Context) ([]migrations.Migration, error) {
+	if err := ctx.Err(); err != nil {
+		return nil, err
+	}
+	return append([]migrations.Migration(nil), s...), nil
+}
+
+func TestManagementMetadataMigrationPreservesPopulatedSigninLedger(t *testing.T) {
+	ctx, db := mappingDatabase(t)
+	base := kernel.CredentialMigrationSource{Base: kernel.StatusMigrationSource{Base: kernel.MigrationSource{}, Version: 10}, Version: 11}
+	dependencies, err := base.Load(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, step := range dependencies {
+		if _, err := db.Exec(ctx, step.UpSQL()); err != nil {
+			t.Fatal("actual dependency history", err)
+		}
+	}
+	// This is the already published mapping1 + signin2 owner history. Install
+	// and populate it through the real runner before adopting any new suffix.
+	legacyMapping, err := migrations.NewMigration(1, "identity_passkey_mappings", migrations.TransactionModeDefault, mappingSchemaSQL, "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	signin, err := (SigninMigrationSource{Version: 2}).Load(ctx)
+	if err != nil || len(signin) != 1 {
+		t.Fatal(err)
+	}
+	legacy := managementMigrationHistory{legacyMapping, signin[0]}
+	sqlDB := stdlib.OpenDB(*db.Config())
+	sqlDB.SetMaxOpenConns(1)
+	t.Cleanup(func() {
+		if err := sqlDB.Close(); err != nil {
+			t.Error("owned migration connection cleanup", err)
+		}
+	})
+	backend, err := migrationpg.New(sqlDB, migrationpg.WithOperationTimeout(5*time.Second), migrationpg.WithLockTimeout(time.Second), migrationpg.WithStatementTimeout(3*time.Second))
+	if err != nil {
+		t.Fatal(err)
+	}
+	backend, err = backend.ForNamespace("identity_passkey")
+	if err != nil {
+		t.Fatal(err)
+	}
+	runner, err := migrations.NewRunner(legacy, backend, migrations.WithUnlockTimeout(time.Second))
+	if err != nil {
+		t.Fatal(err)
+	}
+	installed, err := runner.Up(ctx)
+	if err != nil || len(installed.Records()) != 2 {
+		t.Fatal("published mapping/signin history install", err)
+	}
+	if _, err := db.Exec(ctx, `INSERT INTO identity.users(tenant_id,user_id,status,version) VALUES('tenant-a','user-a','active',1);
+INSERT INTO identity.credential_references(tenant_id,user_id,credential_id,kind,owner,version,enabled) VALUES('tenant-a','user-a','ref-a',2,'passkey',1,true);
+INSERT INTO identity_passkey.relying_parties(rp_namespace,rp_id) VALUES('shared-rp','identity.example');
+INSERT INTO identity_passkey.user_handles(rp_namespace,tenant_id,user_id,user_handle,authority_version) VALUES('shared-rp','tenant-a','user-a',decode(repeat('01',32),'hex'),1);
+INSERT INTO identity_passkey.credentials(rp_namespace,tenant_id,user_id,reference_id,credential_id,version,state,display_label,created_at) VALUES('shared-rp','tenant-a','user-a','ref-a',decode('010203','hex'),1,'active','Existing key',clock_timestamp());
+INSERT INTO identity_passkey.signin_contexts(rp_namespace,ceremony_id,tenant_id,user_id,admission) VALUES('shared-rp','AAAAAAAAAAAAAAAAAAAAAQ','tenant-a','user-a',decode('01','hex'))`); err != nil {
+		t.Fatal("populate published owner history", err)
+	}
+	current, err := (MigrationSource{}).Load(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	current = append(current, signin...)
+	metadata, err := (MetadataVersionMigrationSource{Version: 3}).Load(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	current = append(current, metadata...)
+	runner, err = migrations.NewRunner(managementMigrationHistory(current), backend, migrations.WithUnlockTimeout(time.Second))
+	if err != nil {
+		t.Fatal(err)
+	}
+	adopted, err := runner.Up(ctx)
+	if err != nil {
+		t.Fatal("new metadata history collides with published signin ledger", err)
+	}
+	if len(adopted.Records()) != 1 || adopted.Records()[0].Version() != 3 {
+		t.Fatal("metadata adoption did not append only free version3")
+	}
+	retained, err := backend.ReadLedger(ctx)
+	if err != nil || len(retained) != 3 {
+		t.Fatal("owner ledger was lost", err)
+	}
+	for i, old := range legacy {
+		if retained[i].Version() != old.Version() || retained[i].Name() != old.Name() || retained[i].Checksum() != old.Checksum() || retained[i].Dirty() {
+			t.Fatal("published mapping/signin identity was reinterpreted")
+		}
+	}
+	var label, version, authority string
+	var signinRows int
+	if err := db.QueryRow(ctx, `SELECT display_label,metadata_version::text,version::text,(SELECT count(*) FROM identity_passkey.signin_contexts) FROM identity_passkey.credentials WHERE reference_id='ref-a'`).Scan(&label, &version, &authority, &signinRows); err != nil || label != "Existing key" || version != "1" || authority != "1" || signinRows != 1 {
+		t.Fatal("metadata migration altered populated existing credentials/flows", err)
+	}
+	if repeated, err := runner.Up(ctx); err != nil || len(repeated.Records()) != 0 {
+		t.Fatal("metadata migration did not retain idempotent installed identity", err)
+	}
+}
 
 // These are real mapping constraints, not authentication evidence. Workflow
 // tests must separately use genuine protocol, fresh-auth and session owners.
@@ -68,6 +174,17 @@ INSERT INTO identity_passkey.relying_parties(rp_namespace,rp_id) VALUES('shared-
 	}
 	if err := insertCredential("shared-rp", "tenant-a", "user-a", "ref-a", credential); err != nil {
 		t.Fatal(err)
+	}
+	metadata, err := (MetadataVersionMigrationSource{Version: 3}).Load(ctx)
+	if err != nil || len(metadata) != 1 {
+		t.Fatal("missing allocated metadata suffix", err)
+	}
+	if _, err := db.Exec(ctx, metadata[0].UpSQL()); err != nil {
+		t.Fatal("existing credential metadata adoption", err)
+	}
+	var authorityVersion, metadataVersion string
+	if err := db.QueryRow(ctx, `SELECT version::text,metadata_version::text FROM identity_passkey.credentials WHERE reference_id='ref-a'`).Scan(&authorityVersion, &metadataVersion); err != nil || authorityVersion != "1" || metadataVersion != "1" {
+		t.Fatal("forward history rewrote authentication fence or omitted metadata backfill", err)
 	}
 	constraintError(t, insertCredential("shared-rp", "tenant-b", "user-b", "ref-b", credential), "23505")
 	if err := insertCredential("other-rp", "tenant-b", "user-b", "ref-b", credential); err != nil {
