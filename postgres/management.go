@@ -9,6 +9,7 @@ import (
 
 	"github.com/faustbrian/go-authorization/v3"
 	identity "github.com/faustbrian/go-identity"
+	"github.com/faustbrian/go-identity/password"
 	passwordpg "github.com/faustbrian/go-identity/password/postgres"
 	kernel "github.com/faustbrian/go-identity/postgres"
 	riskpg "github.com/faustbrian/go-identity/risk/postgres"
@@ -73,7 +74,18 @@ func managementOperation() identity.FeatureOperation {
 // without IO. Matching historical retries still authenticate the original live
 // browser/session; consumed proof metadata is not a renewable execution lease.
 func NewManagementService(pool *database.Pool, c ManagementConfig) (*ManagementService, error) {
-	if pool == nil || pool.Raw() == nil || c.Source == nil || !c.Source.Matches(managementOperation().OperationID, c.ProofAudience) || c.Authorization == nil || c.Risk == nil || c.Coordinator.QueryPolicy == nil || c.Coordinator.AdmissionPolicy == nil || c.PolicyVersion == 0 || c.PolicyVersion != c.Coordinator.AdmissionPolicy.PolicyVersion || c.MaximumDuration < time.Millisecond || c.MaximumDuration > 5*time.Second || len(c.RPID) == 0 || len(c.RPID) > 253 || c.Password.Profile.AuthenticationMethod != "password" || c.Password.Profile.CredentialKind != identity.CredentialPassword || c.Password.Profile.CredentialOwner != "identity/password" {
+	s, err := newManagementReaders(pool, c, managementOperation())
+	if err != nil {
+		return nil, err
+	}
+	if _, _, err := s.runtime(&managementInvocation{service: s}); err != nil {
+		return nil, err
+	}
+	return s, nil
+}
+
+func newManagementReaders(pool *database.Pool, c ManagementConfig, operation identity.FeatureOperation) (*ManagementService, error) {
+	if pool == nil || pool.Raw() == nil || c.Source == nil || !c.Source.Matches(operation.OperationID, c.ProofAudience) || c.Authorization == nil || c.Risk == nil || c.Coordinator.QueryPolicy == nil || c.Coordinator.AdmissionPolicy == nil || c.PolicyVersion == 0 || c.PolicyVersion != c.Coordinator.AdmissionPolicy.PolicyVersion || c.MaximumDuration < time.Millisecond || c.MaximumDuration > 5*time.Second || len(c.RPID) == 0 || len(c.RPID) > 253 || c.Password.Profile.AuthenticationMethod != "password" || c.Password.Profile.CredentialKind != identity.CredentialPassword || c.Password.Profile.CredentialOwner != "identity/password" {
 		return nil, identity.InvalidInputError{Field: "passkey_management"}
 	}
 	if _, err := PasskeyAuthorityKey(c.RPNamespace, c.TenantID, "configuration"); err != nil {
@@ -103,16 +115,16 @@ func NewManagementService(pool *database.Pool, c ManagementConfig) (*ManagementS
 	if err != nil {
 		return nil, err
 	}
-	s := &ManagementService{pool: pool, config: func() ManagementConfig { return c }, directory: directory, sessions: sessions, protocol: protocol}
-	if _, _, err := s.runtime(&managementInvocation{service: s}); err != nil {
-		return nil, err
-	}
-	return s, nil
+	return &ManagementService{pool: pool, config: func() ManagementConfig { return c }, directory: directory, sessions: sessions, protocol: protocol}, nil
 }
 
 func (s *ManagementService) authenticate(ctx context.Context, r passkey.UpdateRequest) (session.GetResult, session.SessionSpec, error) {
+	return s.authenticatePrimary(ctx, r.Primary, managementOperation())
+}
+
+func (s *ManagementService) authenticatePrimary(ctx context.Context, primary password.ActionPrimaryRequest, operation identity.FeatureOperation) (session.GetResult, session.SessionSpec, error) {
 	c := s.config()
-	token, err := session.ParseToken(r.Primary.Session.Token())
+	token, err := session.ParseToken(primary.Session.Token())
 	if err != nil {
 		return session.GetResult{}, session.SessionSpec{}, identity.ForbiddenError{}
 	}
@@ -125,8 +137,8 @@ func (s *ManagementService) authenticate(ctx context.Context, r passkey.UpdateRe
 		return session.GetResult{}, session.SessionSpec{}, err
 	}
 	spec, err := got.Session.Bindings()
-	caller, p := r.Primary.Caller, r.Primary.Proof
-	if !got.Authenticated || err != nil || got.ValidateAt(c.Password.Validation.Clock.Now().UTC()) != nil || caller.Validate() != nil || uint64(caller.PolicyRevision) != c.PolicyVersion || caller.Request.Tenant != authorization.TenantID(c.TenantID) || caller.Request.Subject.Kind != authorization.SubjectUser || caller.Request.Subject.ID != authorization.SubjectID(spec.UserID) || caller.Request.Action != authorization.Action(managementOperation().OperationID) || caller.Request.Resource.Type != "identity.user" || caller.Request.Resource.ID != authorization.ResourceID(spec.UserID) || p.Proof.Tenant != string(spec.TenantID) || p.Proof.Subject != string(spec.UserID) || p.SessionID != spec.SessionID || p.SessionVersion != spec.Version || p.Action != managementOperation().OperationID || p.Proof.Purpose != "identity.password.verify" || p.Proof.Audience != c.ProofAudience {
+	caller, p := primary.Caller, primary.Proof
+	if !got.Authenticated || err != nil || got.ValidateAt(c.Password.Validation.Clock.Now().UTC()) != nil || caller.Validate() != nil || uint64(caller.PolicyRevision) != c.PolicyVersion || caller.Request.Tenant != authorization.TenantID(c.TenantID) || caller.Request.Subject.Kind != authorization.SubjectUser || caller.Request.Subject.ID != authorization.SubjectID(spec.UserID) || caller.Request.Action != authorization.Action(operation.OperationID) || caller.Request.Resource.Type != "identity.user" || caller.Request.Resource.ID != authorization.ResourceID(spec.UserID) || p.Proof.Tenant != string(spec.TenantID) || p.Proof.Subject != string(spec.UserID) || p.SessionID != spec.SessionID || p.SessionVersion != spec.Version || p.Action != operation.OperationID || p.Proof.Purpose != "identity.password.verify" || p.Proof.Audience != c.ProofAudience {
 		return session.GetResult{}, session.SessionSpec{}, identity.ForbiddenError{}
 	}
 	decision, err := c.Authorization.Decide(ctx, caller)
@@ -223,16 +235,27 @@ func (s *ManagementService) Update(ctx context.Context, r passkey.UpdateRequest)
 }
 
 func (s *ManagementService) finishMetadata(ctx context.Context, r passkey.UpdateRequest, original session.GetResult, spec session.SessionSpec, out passkey.UpdateResult, observedErr error) (passkey.UpdateResult, error) {
-	final, current, err := s.authenticate(ctx, r)
-	if err != nil || current.SessionID != spec.SessionID || current.Version != spec.Version || original.ValidateAt(s.config().Password.Validation.Clock.Now().UTC()) != nil || final.ValidateAt(s.config().Password.Validation.Clock.Now().UTC()) != nil {
-		return passkey.UpdateResult{}, identity.ForbiddenError{}
+	if err := s.metadataAdmission(ctx, r.Primary, managementOperation(), original, spec); err != nil {
+		return passkey.UpdateResult{}, err
 	}
 	return out, observedErr
 }
 
+func (s *ManagementService) metadataAdmission(ctx context.Context, primary password.ActionPrimaryRequest, operation identity.FeatureOperation, original session.GetResult, spec session.SessionSpec) error {
+	final, current, err := s.authenticatePrimary(ctx, primary, operation)
+	if err != nil || current.SessionID != spec.SessionID || current.Version != spec.Version || original.ValidateAt(s.config().Password.Validation.Clock.Now().UTC()) != nil || final.ValidateAt(s.config().Password.Validation.Clock.Now().UTC()) != nil {
+		return identity.ForbiddenError{}
+	}
+	return nil
+}
+
 func (s *ManagementService) requestIntent(r passkey.UpdateRequest) (identity.RequestIntent, error) {
+	return s.managementRequestIntent(r.Primary, r.ReferenceID, r.ExpectedVersion, r.Network, []identity.FeatureField{optionsText("management.name", r.Name)})
+}
+
+func (s *ManagementService) managementRequestIntent(primary password.ActionPrimaryRequest, reference identity.CredentialID, expected uint64, network string, additional []identity.FeatureField) (identity.RequestIntent, error) {
 	c := s.config()
-	token, err := session.ParseToken(r.Primary.Session.Token())
+	token, err := session.ParseToken(primary.Session.Token())
 	if err != nil {
 		return identity.RequestIntent{}, err
 	}
@@ -240,12 +263,13 @@ func (s *ManagementService) requestIntent(r passkey.UpdateRequest) (identity.Req
 	if err != nil {
 		return identity.RequestIntent{}, err
 	}
-	p := r.Primary.Proof
-	fields := []identity.FeatureField{optionsText("management.rp-namespace", c.RPNamespace), optionsText("management.rp-id", c.RPID), optionsText("management.policy", c.PolicyID), optionsUint("management.policy-version", c.PolicyVersion), optionsText("management.reference", string(r.ReferenceID)), optionsUint("management.expected", r.ExpectedVersion), optionsText("management.name", r.Name), optionsText("management.network", r.Network), optionsBytes("management.session", digest.Sum[:]), optionsUint("management.session-key", uint64(digest.KeyVersion)), optionsText("management.proof.id", string(p.Proof.ID)), optionsText("management.proof.tenant", p.Proof.Tenant), optionsText("management.proof.subject", p.Proof.Subject), optionsText("management.proof.method", p.Proof.Method), optionsUint("management.proof.assurance", uint64(p.Proof.Assurance)), optionsText("management.proof.purpose", string(p.Proof.Purpose)), optionsText("management.proof.audience", p.Proof.Audience), optionsText("management.proof.session", p.SessionID), optionsUint("management.proof.version", p.SessionVersion), optionsText("management.proof.action", p.Action), {Name: "management.proof.issued", Value: identity.FeatureValue{Kind: identity.FeatureTime, Time: p.Proof.IssuedAt}}, {Name: "management.proof.expires", Value: identity.FeatureValue{Kind: identity.FeatureTime, Time: p.Proof.ExpiresAt}}}
+	p := primary.Proof
+	fields := []identity.FeatureField{optionsText("management.rp-namespace", c.RPNamespace), optionsText("management.rp-id", c.RPID), optionsText("management.policy", c.PolicyID), optionsUint("management.policy-version", c.PolicyVersion), optionsText("management.reference", string(reference)), optionsUint("management.expected", expected), optionsText("management.network", network), optionsBytes("management.session", digest.Sum[:]), optionsUint("management.session-key", uint64(digest.KeyVersion)), optionsText("management.proof.id", string(p.Proof.ID)), optionsText("management.proof.tenant", p.Proof.Tenant), optionsText("management.proof.subject", p.Proof.Subject), optionsText("management.proof.method", p.Proof.Method), optionsUint("management.proof.assurance", uint64(p.Proof.Assurance)), optionsText("management.proof.purpose", string(p.Proof.Purpose)), optionsText("management.proof.audience", p.Proof.Audience), optionsText("management.proof.session", p.SessionID), optionsUint("management.proof.version", p.SessionVersion), optionsText("management.proof.action", p.Action), {Name: "management.proof.issued", Value: identity.FeatureValue{Kind: identity.FeatureTime, Time: p.Proof.IssuedAt}}, {Name: "management.proof.expires", Value: identity.FeatureValue{Kind: identity.FeatureTime, Time: p.Proof.ExpiresAt}}}
+	fields = append(fields, additional...)
 	profile := c.Password.Profile
 	fields = append(fields, optionsText("management.reader.global", profile.GlobalAuthorityID), optionsText("management.reader.policy", profile.PolicyNamespace), optionsText("management.reader.audience", profile.Audience), optionsText("management.reader.schema", c.Password.Repository.Schema))
-	if r.Primary.CSRFToken != (session.CSRFToken{}) {
-		csrf, err := r.Primary.CSRFToken.Digest(c.RequestCSRFKey, session.CSRFBinding{TenantID: c.TenantID, SessionID: p.SessionID, SessionVersion: p.SessionVersion})
+	if primary.CSRFToken != (session.CSRFToken{}) {
+		csrf, err := primary.CSRFToken.Digest(c.RequestCSRFKey, session.CSRFBinding{TenantID: c.TenantID, SessionID: p.SessionID, SessionVersion: p.SessionVersion})
 		if err != nil {
 			return identity.RequestIntent{}, err
 		}

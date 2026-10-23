@@ -53,12 +53,13 @@ func (enrollmentPolicy) Decide(ctx context.Context, c authorization.DecisionCont
 }
 
 type enrollmentFixture struct {
-	ctx      context.Context
-	pool     *database.Pool
-	service  *EnrollmentService
-	proofs   *passwordpg.ReauthenticationService
-	bearer   auth.BearerCredential
-	counters risk.CounterCoordinator
+	ctx         context.Context
+	pool        *database.Pool
+	service     *EnrollmentService
+	proofs      *passwordpg.ReauthenticationService
+	bearer      auth.BearerCredential
+	counters    risk.CounterCoordinator
+	proofConfig passwordpg.ReauthenticationConfig
 }
 
 // Existing active password/session state is deliberate fixture input. Every
@@ -302,7 +303,8 @@ INSERT INTO identity_mfa.factor_authorities VALUES('01ARZ3NDEKTSV4RRFFQ69G5FAV',
 	}
 	targets = append(targets, passwordpg.ReauthenticationTarget{Purpose: "identity.password.verify", Action: "identity.passkey.update", Audience: "passkey-enrollment"})
 	profile := sessionpg.IdentifierAdmissionConfig{GlobalAuthorityID: "passkey-fixture", PolicyNamespace: "users", Audience: "passkey-fixture", AuthenticationMethod: "password", CredentialKind: identity.CredentialPassword, CredentialOwner: "identity/password"}
-	proofs, err := passwordpg.NewReauthenticationService(pool, passwordpg.ReauthenticationConfig{Repository: passwordpg.Config{MaximumDuration: 5 * time.Second, HashPolicy: primitive.DefaultPolicy()}, Verifier: password.VerifierConfig{Primitive: crypto, MaximumBytes: 128, Timeout: 4 * time.Second, DummyHash: hash, Now: proofNow}, Session: sessionpg.Config{Schema: "session_store", MaximumDuration: time.Second}, Profile: profile, LookupKeys: []session.DigestKey{lookup}, Risk: risk.AuthenticationAdmissionCustodyConfig{Evaluation: evaluator, ConfigurationID: "passkey-verify", Keys: []risk.EvidenceKey{evidence}}, Coordinator: coordinator, SigningKey: signer, VerificationKeys: map[string]ed25519.PublicKey{"fixture": public}, Issuer: "passkey-fixture", Environment: "isolated", Targets: targets, TTL: 5 * time.Minute, IdentifierKey: bytes.Repeat([]byte{36}, 32)})
+	proofConfig := passwordpg.ReauthenticationConfig{Repository: passwordpg.Config{MaximumDuration: 5 * time.Second, HashPolicy: primitive.DefaultPolicy()}, Verifier: password.VerifierConfig{Primitive: crypto, MaximumBytes: 128, Timeout: 4 * time.Second, DummyHash: hash, Now: proofNow}, Session: sessionpg.Config{Schema: "session_store", MaximumDuration: time.Second}, Profile: profile, LookupKeys: []session.DigestKey{lookup}, Risk: risk.AuthenticationAdmissionCustodyConfig{Evaluation: evaluator, ConfigurationID: "passkey-verify", Keys: []risk.EvidenceKey{evidence}}, Coordinator: coordinator, SigningKey: signer, VerificationKeys: map[string]ed25519.PublicKey{"fixture": public}, Issuer: "passkey-fixture", Environment: "isolated", Targets: targets, TTL: 5 * time.Minute, IdentifierKey: bytes.Repeat([]byte{36}, 32)}
+	proofs, err := passwordpg.NewReauthenticationService(pool, proofConfig)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -326,7 +328,7 @@ INSERT INTO identity_mfa.factor_authorities VALUES('01ARZ3NDEKTSV4RRFFQ69G5FAV',
 	if err != nil {
 		t.Fatal(err)
 	}
-	return &enrollmentFixture{ctx: ctx, pool: pool, service: service, proofs: proofs, bearer: auth.NewBearerCredential(wire), counters: counters}
+	return &enrollmentFixture{ctx: ctx, pool: pool, service: service, proofs: proofs, bearer: auth.NewBearerCredential(wire), counters: counters, proofConfig: proofConfig}
 }
 
 func (f *enrollmentFixture) request(t *testing.T, finish bool) RegistrationRequest {

@@ -2,6 +2,15 @@
 
 ## Unreleased
 
+- Add native keyed self-user deletion through genuine signed delete proof and
+  the configured password-reset recovery owner. Proof consumption, current
+  factors/recovery, protocol key erasure, disabled reference, separate metadata
+  and passkey authority successors, and exact removal audit/lifecycle share one
+  transaction. Passkey sessions lose authority; the independent password
+  session retains metadata-only original-key retry. Install the password
+  deletion proof suffix after all selected histories and use the pinned kernel,
+  MFA and WebAuthn removal owners. Removed IDs remain reserved, and inventory
+  excludes their tombstones before bounded pagination.
 - Add keyed self-user passkey label rename through a genuine fresh signed
   update action proof and the existing request-key/coordinator owners. Safe
   reference IDs and expected metadata versions bind one original command;

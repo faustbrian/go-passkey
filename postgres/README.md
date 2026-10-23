@@ -3,6 +3,54 @@
 Experimental, incomplete and unreleased. The selected existing-account flow
 does not substitute for a complete passkey authentication platform.
 
+`NewDeletionService` selects native self-user removal under the existing
+single-factor password-session profile. `DeletionConfig.ManagementConfig`
+supplies the fixed tenant/RP, password reader, original-key, policy and risk
+owners, but its concrete action source must select exactly
+`identity.passkey.delete`. `Recovery` must be the password owner's concrete
+`NewPasskeyRemovalRecoverySource` backed by a full configured native emailed
+password-reset request/completion service on the same primary, session schema,
+account realm and policy. Another passkey, a boolean or directory metadata
+without matching usable password material and verified recovery email is not a
+replacement. Unknown or missing current factor/recovery authority denies.
+
+Use the dependency baselines pinned in this module's `go.mod`. Append the
+password-owned `PasskeyDeletionReauthenticationMigrationSource` after every
+installed selected proof suffix; do not replace or reorder that history.
+For mapping1/signin2/metadata3 and enrollment-proof11/management-proof12,
+deletion proof13 is the next selected fixture suffix. Allocate the next unused
+version for other installed histories. The existing kernel request-key and
+mapping/metadata histories remain required; this adapter adds no new journal,
+protocol store or removal migration.
+
+`Delete` accepts root `passkey.DeleteRequest`: a safe List reference and observed
+management metadata version, genuine original session/action/CSRF custody and
+exact `IdempotencyKey`. Leave incoming command, record and target overrides
+empty. Unlike the historical repeat/raw-credential catalog shape, this selected
+native profile admits one server-allocated original key before preparation.
+Reference, protocol and management versions are independent: deletion fences
+all three, while the canonical `identity.passkey.remove_credential` receipt and
+lifecycle advance the **reference** version, not `ExpectedVersion`.
+
+Fresh commitment atomically consumes the proof, checks usable recovery and
+removes protocol verification material. It disables the reserved reference,
+advances its version and mapping metadata, increments the RP/user passkey
+generation and persists required audit/outbox effects.
+Removed mappings disappear from inventory before pagination; IDs and
+handles remain reserved to prevent resurrection. The shared passkey generation
+denies previously issued RP/user passkey sessions on their next authoritative
+comparison. User-wide credential epochs and the independent password session
+remain unchanged. No authenticator-local credential erasure is claimed.
+
+`DeleteResult` contains only command durability metadata. Preserve identical
+key/input and original password-session custody on retry, including after
+proof expiry or consumption. Matching retries recover the original receipt
+without rechecking recovery, consuming another proof, repeating removal or
+projecting credentials. Revoked/expired original sessions cannot disclose it.
+Unknown COMMIT acknowledgement is not rollback; retain the original key and
+command. This API does not enable passkey-session management, passkey-first
+signup, conditional signin, HTTP composition or complete platform qualification.
+
 `MigrationSource` installs only identity-facing RP bindings, stable opaque
 handles, credential references, labels and original enrollment admission context.
 The latter retains the options phase's session and authority generations; it
