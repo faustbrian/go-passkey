@@ -58,6 +58,14 @@ func newSigninFixture(t *testing.T) *signinFixture {
 }
 
 func newSigninFixtureFlags(t *testing.T, registrationFlags byte) *signinFixture {
+	return newSigninFixtureFlagsProfile(t, registrationFlags, false)
+}
+
+func newDiscoverableSigninFixture(t *testing.T) *signinFixture {
+	return newSigninFixtureFlagsProfile(t, 0x45, true)
+}
+
+func newSigninFixtureFlagsProfile(t *testing.T, registrationFlags byte, discovery bool) *signinFixture {
 	t.Helper()
 	f := newEnrollmentFixture(t)
 	key, err := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
@@ -110,7 +118,7 @@ func newSigninFixtureFlags(t *testing.T, registrationFlags byte) *signinFixture 
 	if _, err := f.service.Register(f.ctx, RegistrationCompletion{RegistrationRequest: f.request(t, true), CeremonyID: ceremony.ID, Response: registration, Label: "Signin key"}); err != nil {
 		t.Fatal("real native registration", err)
 	}
-	signin := newSigninFixtureForEnrolledAccount(t, f)
+	signin := newSigninFixtureForEnrolledAccountProfile(t, f, discovery)
 	signin.key, signin.id, signin.assertionFlags = key, id, registrationFlags&0x18|0x05
 	return signin
 }
@@ -119,6 +127,10 @@ func newSigninFixtureFlags(t *testing.T, registrationFlags byte) *signinFixture 
 // genuine enrollment. Browser callers retain their authenticator privately;
 // this helper neither generates a key nor fabricates registration or proof.
 func newSigninFixtureForEnrolledAccount(t *testing.T, f *enrollmentFixture) *signinFixture {
+	return newSigninFixtureForEnrolledAccountProfile(t, f, false)
+}
+
+func newSigninFixtureForEnrolledAccountProfile(t *testing.T, f *enrollmentFixture, discovery bool) *signinFixture {
 	t.Helper()
 	config := f.service.config()
 	apply := func(source migrations.Source) {
@@ -151,7 +163,7 @@ func newSigninFixtureForEnrolledAccount(t *testing.T, f *enrollmentFixture) *sig
 	if _, err := f.pool.Raw().Exec(f.ctx, `INSERT INTO identity.identifiers(tenant_id,user_id,identifier_id,kind,canonical_value,verified,is_primary,version,verification_state,verification_version,verified_at) VALUES('01ARZ3NDEKTSV4RRFFQ69G5FAV','01ARZ3NDEKTSV4RRFFQ69G5FAW','signin-email','email','passkey@example.test',true,true,1,2,1,clock_timestamp())`); err != nil {
 		t.Fatal(err)
 	}
-	policy, err := risk.NewPolicy(risk.PolicyConfig{Version: 1, Limits: risk.VelocityLimits{MaxDimensions: 4, MaxCounters: 16, MaxWindow: time.Hour, MaxLimit: 120, KeyBytes: 64, RetryAfterMax: time.Hour}, Profiles: []risk.Profile{
+	policy, err := risk.NewPolicy(risk.PolicyConfig{Version: 1, PasskeyDiscovery: discovery, Limits: risk.VelocityLimits{MaxDimensions: 4, MaxCounters: 16, MaxWindow: time.Hour, MaxLimit: 120, KeyBytes: 64, RetryAfterMax: time.Hour}, Profiles: []risk.Profile{
 		{Class: risk.Authentication, Phase: risk.BeforeCredential, Dimensions: []risk.Dimension{risk.TenantDimension, risk.NetworkDimension, risk.DeviceDimension, risk.IdentifierDimension}, Window: 5 * time.Minute, Limit: 10, EvidenceTTL: 5 * time.Minute, ThresholdAction: risk.Throttle, Unknown: risk.DenyUnknown, MaxCounters: 4, RequiredSignals: []string{"velocity"}},
 		{Class: risk.CredentialMutation, Phase: risk.ReserveWithCommand, Dimensions: []risk.Dimension{risk.TenantDimension, risk.SubjectDimension, risk.SessionDimension, risk.NetworkDimension}, Window: 15 * time.Minute, Limit: 5, ThresholdAction: risk.Deny, EvidenceTTL: 15 * time.Minute, Unknown: risk.DenyUnknown, MaxCounters: 4, RequiredSignals: []string{"velocity"}},
 		{Class: risk.Privileged, Phase: risk.ReserveWithCommand, Dimensions: []risk.Dimension{risk.TenantDimension, risk.ActorDimension, risk.ResourceDimension, risk.NetworkDimension}, Window: time.Hour, Limit: 20, ThresholdAction: risk.Deny, EvidenceTTL: 15 * time.Minute, Unknown: risk.DenyUnknown, MaxCounters: 4, RequiredSignals: []string{"velocity"}},

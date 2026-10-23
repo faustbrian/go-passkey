@@ -33,6 +33,9 @@ type signinInvocation struct {
 	flow                                     session.PreAuthTransaction
 	cookie                                   session.TokenDigest
 	recipient                                kernel.RecipientRecord
+	discoverable                             bool
+	selectedUser                             identity.User
+	selected                                 kernel.CredentialAdmission
 	directory                                kernel.DirectoryAuthorityRecord
 	factor, passkey, policy, protocolVersion uint64
 	handle                                   []byte
@@ -65,11 +68,11 @@ func (p *signinInvocation) binding() identity.CommandBinding {
 	c := p.service.config()
 	actor, kind := c.Flow.ActorID, authorization.SubjectServiceAccount
 	if p.finalization != nil {
-		actor, kind = identity.ActorID(p.recipient.User.ID), authorization.SubjectUser
+		actor, kind = identity.ActorID(p.user().ID), authorization.SubjectUser
 	}
 	b := identity.CommandBinding{CommandID: p.request.CommandID, TenantID: c.Protocol.TenantID, ActorID: actor, ActorKind: kind, RecordID: string(p.request.CommandID), OperationID: p.operation.OperationID, SchemaID: p.operation.SchemaID, SchemaVersion: 1, PolicyID: c.Flow.PolicyID, PolicyVersion: c.Flow.PolicyVersion, CorrelationID: p.request.CorrelationID}
 	if p.finalization != nil {
-		b.UserID = p.recipient.User.ID
+		b.UserID = p.user().ID
 	} else {
 		b.AnonymousFlowID = string(p.request.FlowID)
 	}
@@ -115,7 +118,15 @@ func (*signinInvocation) FinalizeRegistration(context.Context, webauthn.Registra
 
 func (p *signinInvocation) FinalizeAssertion(ctx context.Context, input webauthn.AssertionTransition) (webauthn.Credential, identity.CommitOutcome, error) {
 	mutation, err := input.Mutation()
-	if err != nil || mutation.Context != p.ceremonyContext() || mutation.Before.UserID != p.recipient.User.ID || mutation.Before.TenantID != p.recipient.User.TenantID || mutation.Before.Version != p.protocolVersion || !bytes.Equal(mutation.Before.UserHandle, p.handle) {
+	if err != nil || mutation.Context != p.ceremonyContext() {
+		return webauthn.Credential{}, identity.CommitOutcomeInvalid, identity.ForbiddenError{}
+	}
+	if p.discoverable {
+		if err := p.selectDiscovered(ctx, mutation); err != nil {
+			return webauthn.Credential{}, identity.CommitOutcomeInvalid, err
+		}
+	}
+	if mutation.Before.UserID != p.user().ID || mutation.Before.TenantID != p.user().TenantID || mutation.Before.Version != p.protocolVersion || !bytes.Equal(mutation.Before.UserHandle, p.handle) {
 		return webauthn.Credential{}, identity.CommitOutcomeInvalid, identity.ForbiddenError{}
 	}
 	final, err := p.service.protocol.DiscoverableAssertionFinalization(input)
@@ -253,7 +264,8 @@ func (p *signinInvocation) sessionSpec() (session.SessionSpec, error) {
 	a := func(k string, v uint64) session.AuthorityBinding {
 		return session.AuthorityBinding{ScopeKey: k, Version: v}
 	}
-	vector, err := session.NewAuthoritySnapshot(session.AuthoritySnapshotSpec{Global: a(keys.Global, p.directory.GlobalVersion), Tenant: a(keys.Tenant, p.directory.TenantVersion), User: a(keys.User, p.recipient.UserAuthorityVersion), Identifier: a(keys.Identifier, p.recipient.IdentifierAuthorityVersion), Credential: a(keys.Credential, p.recipient.CredentialAuthorityVersion), Session: a(sk.Session, 1), SessionFamily: a(sk.Family, 1), Authorization: a(pk, p.policy), Factor: session.OptionalAuthorityBinding{Present: true, Binding: a(fk, p.factor)}, Passkey: session.OptionalAuthorityBinding{Present: true, Binding: a(passkeyKey, p.passkey)}})
+	ua := p.userAuthority()
+	vector, err := session.NewAuthoritySnapshot(session.AuthoritySnapshotSpec{Global: a(keys.Global, p.directory.GlobalVersion), Tenant: a(keys.Tenant, p.directory.TenantVersion), User: a(keys.User, ua.UserAuthorityVersion), Identifier: a(keys.Identifier, ua.IdentifierAuthorityVersion), Credential: a(keys.Credential, ua.CredentialAuthorityVersion), Session: a(sk.Session, 1), SessionFamily: a(sk.Family, 1), Authorization: a(pk, p.policy), Factor: session.OptionalAuthorityBinding{Present: true, Binding: a(fk, p.factor)}, Passkey: session.OptionalAuthorityBinding{Present: true, Binding: a(passkeyKey, p.passkey)}})
 	if err != nil {
 		return session.SessionSpec{}, err
 	}
@@ -263,7 +275,7 @@ func (p *signinInvocation) sessionSpec() (session.SessionSpec, error) {
 }
 
 func (p *signinInvocation) policyScope() policy.AuthorityScope {
-	return policy.AuthorityScope{TenantID: authorization.TenantID(p.recipient.User.TenantID), PolicyNamespace: p.service.config().Profile.PolicyNamespace, SubjectID: authorization.SubjectID(p.recipient.User.ID)}
+	return policy.AuthorityScope{TenantID: authorization.TenantID(p.user().TenantID), PolicyNamespace: p.service.config().Profile.PolicyNamespace, SubjectID: authorization.SubjectID(p.user().ID)}
 }
 
 func (p *signinInvocation) execute(ctx context.Context, command identity.Command) (identity.CommandResult, error) {
@@ -354,8 +366,14 @@ func (p *signinInvocation) current(ctx context.Context, w kernel.Work) error {
 		return err
 	}
 	if p.finalization != nil {
-		if err := w.RequireRecipient(ctx, p, p.recipient); err != nil {
-			return err
+		if p.discoverable {
+			if _, err := w.RequireActiveCredential(ctx, p, p.selected); err != nil {
+				return err
+			}
+		} else {
+			if err := w.RequireRecipient(ctx, p, p.recipient); err != nil {
+				return err
+			}
 		}
 		if err := w.RequireActiveUserAuthorization(ctx, p, kernel.UserAuthorizationAdmission{Scope: p.policyScope(), Version: p.policy}); err != nil {
 			return err
@@ -418,7 +436,7 @@ func (p *signinInvocation) ApplyFeature(ctx context.Context, w kernel.Work, c id
 		if err := sessionpg.FinalizePreAuth(ctx, w, p.service.config().Repository, p.flow, use); err != nil {
 			return identity.FeatureReceipt{}, err
 		}
-		if n, err := w.Exec(ctx, `UPDATE identity_passkey.credentials SET last_used_at=clock_timestamp() WHERE rp_namespace=$1 AND tenant_id=$2 AND user_id=$3 AND reference_id=$4 AND version=$5 AND state='active'`, p.service.config().Profile.RPNamespace, string(p.recipient.User.TenantID), string(p.recipient.User.ID), string(p.reference.ID), p.reference.Version); err != nil || n != 1 {
+		if n, err := w.Exec(ctx, `UPDATE identity_passkey.credentials SET last_used_at=clock_timestamp() WHERE rp_namespace=$1 AND tenant_id=$2 AND user_id=$3 AND reference_id=$4 AND version=$5 AND state='active'`, p.service.config().Profile.RPNamespace, string(p.user().TenantID), string(p.user().ID), string(p.reference.ID), p.reference.Version); err != nil || n != 1 {
 			if err != nil {
 				return identity.FeatureReceipt{}, err
 			}
@@ -463,7 +481,13 @@ func (p *signinInvocation) preAuthUse(w kernel.Work) (sessionpg.PreAuthUse, erro
 
 func (p *signinInvocation) lockMapping(ctx context.Context, w kernel.Work) error {
 	c := p.service.config()
-	rows, err := w.Query(ctx, `SELECT h.user_handle,h.authority_version::text FROM identity_passkey.relying_parties p JOIN identity_passkey.user_handles h USING(rp_namespace) WHERE p.rp_namespace=$1 AND p.rp_id=$2 AND h.tenant_id=$3 AND h.user_id=$4 FOR SHARE OF p,h`, c.Profile.RPNamespace, c.Protocol.RelyingParty.ID, string(p.recipient.User.TenantID), string(p.recipient.User.ID))
+	sql := `SELECT h.user_handle,h.authority_version::text FROM identity_passkey.relying_parties p JOIN identity_passkey.user_handles h USING(rp_namespace) WHERE p.rp_namespace=$1 AND p.rp_id=$2 AND h.tenant_id=$3 AND h.user_id=$4 FOR SHARE OF p,h`
+	args := []any{c.Profile.RPNamespace, c.Protocol.RelyingParty.ID, string(p.user().TenantID), string(p.user().ID)}
+	if p.discoverable {
+		sql = `SELECT h.user_handle,h.authority_version::text FROM identity_passkey.relying_parties p JOIN identity_passkey.user_handles h USING(rp_namespace) JOIN identity_passkey.credentials c USING(rp_namespace,tenant_id,user_id) WHERE p.rp_namespace=$1 AND p.rp_id=$2 AND h.tenant_id=$3 AND h.user_id=$4 AND c.credential_id=$5 AND c.reference_id=$6 AND c.version=$7::numeric AND c.state='active' FOR SHARE OF p,h,c`
+		args = append(args, p.mutation.Before.ID, string(p.reference.ID), strconv.FormatUint(p.reference.Version, 10))
+	}
+	rows, err := w.Query(ctx, sql, args...)
 	if err != nil {
 		return err
 	}
@@ -480,6 +504,9 @@ func (p *signinInvocation) lockMapping(ctx context.Context, w kernel.Work) error
 }
 
 func (p *signinInvocation) contextWire() ([]byte, error) {
+	if p.discoverable {
+		return p.discoverableContextWire(true)
+	}
 	flow, err := p.flow.Bindings()
 	if err != nil {
 		return nil, err
@@ -491,6 +518,9 @@ func (p *signinInvocation) contextWire() ([]byte, error) {
 }
 func (p *signinInvocation) context(ctx context.Context, w kernel.Work, create bool) error {
 	wire, err := p.contextWire()
+	if p.discoverable {
+		wire, err = p.discoverableContextWire(false)
+	}
 	if err != nil {
 		return err
 	}
@@ -498,8 +528,12 @@ func (p *signinInvocation) context(ctx context.Context, w kernel.Work, create bo
 	if p.creation != nil {
 		id = string(p.request.CommandID)
 	}
+	user := p.recipient.User.ID
+	if p.discoverable {
+		user = ""
+	}
 	if create {
-		n, err := w.Exec(ctx, `INSERT INTO identity_passkey.signin_contexts(rp_namespace,ceremony_id,tenant_id,user_id,admission) VALUES($1,$2,$3,NULLIF($4,''),$5)`, p.service.config().Profile.RPNamespace, id, string(p.service.config().Protocol.TenantID), string(p.recipient.User.ID), wire)
+		n, err := w.Exec(ctx, `INSERT INTO identity_passkey.signin_contexts(rp_namespace,ceremony_id,tenant_id,user_id,admission) VALUES($1,$2,$3,NULLIF($4,''),$5)`, p.service.config().Profile.RPNamespace, id, string(p.service.config().Protocol.TenantID), string(user), wire)
 		if err != nil {
 			return err
 		}
@@ -507,7 +541,7 @@ func (p *signinInvocation) context(ctx context.Context, w kernel.Work, create bo
 			return identity.ConflictError{}
 		}
 	}
-	rows, err := w.Query(ctx, `SELECT admission FROM identity_passkey.signin_contexts WHERE rp_namespace=$1 AND ceremony_id=$2 AND tenant_id=$3 AND COALESCE(user_id,'')=$4 FOR SHARE`, p.service.config().Profile.RPNamespace, id, string(p.service.config().Protocol.TenantID), string(p.recipient.User.ID))
+	rows, err := w.Query(ctx, `SELECT admission FROM identity_passkey.signin_contexts WHERE rp_namespace=$1 AND ceremony_id=$2 AND tenant_id=$3 AND COALESCE(user_id,'')=$4 FOR SHARE`, p.service.config().Profile.RPNamespace, id, string(p.service.config().Protocol.TenantID), string(user))
 	if err != nil {
 		return err
 	}
@@ -522,6 +556,17 @@ func (p *signinInvocation) context(ctx context.Context, w kernel.Work, create bo
 	return nil
 }
 func (p *signinInvocation) readContext(ctx context.Context) error {
+	if p.discoverable {
+		wire, err := p.discoverableContextWire(false)
+		if err != nil {
+			return err
+		}
+		var original []byte
+		if err := p.service.pool.Raw().QueryRow(ctx, `SELECT admission FROM identity_passkey.signin_contexts WHERE rp_namespace=$1 AND ceremony_id=$2 AND tenant_id=$3 AND user_id IS NULL`, p.service.config().Profile.RPNamespace, p.ceremonyID, string(p.service.config().Protocol.TenantID)).Scan(&original); err != nil || !bytes.Equal(original, wire) {
+			return identity.ForbiddenError{}
+		}
+		return nil
+	}
 	wire, err := p.contextWire()
 	if err != nil {
 		return err

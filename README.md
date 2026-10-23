@@ -1,8 +1,8 @@
 # go-passkey
 
 > **Experimental, incomplete and unreleased.** Selected native existing-account
-> enrollment, identified signin and session APIs exist. Passkey-first signup,
-> discoverable login, complete management and platform qualification remain work.
+> enrollment, identified/discoverable signin and session APIs exist. Passkey-first
+> signup, complete management and platform qualification remain work.
 
 `go-passkey` implements the Golib boundary for identity-facing passkey
 enrolment, discoverable credentials, passwordless signup and sign-in, synced
@@ -24,7 +24,8 @@ persistence.
   projected text for the output medium.
 - The [PostgreSQL module](postgres/README.md) owns RP-wide mappings and current
   passkey session authority through the existing kernel and MFA owners. Its
-  experimental APIs compose fresh-proof enrollment, identified login and safe
+  experimental APIs compose fresh-proof enrollment, explicit identified or
+  identifier-free resident login and safe
   inventory with actual protocol, risk and session owners. Public-consumer
   qualification and complete independent workflow review remain unfinished.
 

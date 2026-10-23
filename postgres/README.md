@@ -51,7 +51,7 @@ cursor; an owner failure returns no partial page. AAGUID and backup flags come
 from the protocol owner, not another key/counter store. Raw credential IDs,
 handles, keys, counters and authentication custody are never exported.
 
-`NewSigninService` selects identified UV/ES256 login. First use `PrepareFlow` and
+`NewSigninService` composes UV/ES256 login. First use `PrepareFlow` and
 `IssueFlow` to retain the real session-owned browser cookie and remember choice;
 then pass that original flow to `AuthenticationOptions` and `Signin`. Trusted
 configuration fixes tenant, RP, origin, policy and ingress service actor.
@@ -61,8 +61,24 @@ unverified and no-passkey identifiers receive the same public options profile.
 The original optional account snapshot and keyed identifier binding remain
 private; a suppressed snapshot cannot later become authenticating. Completion
 still requires that original email and unchanged identity/factor/policy epochs
-to match the real root-verified credential. This does not enable identifier-free
-signin, nor does it claim constant-time database execution.
+to match the real root-verified credential. These identified methods retain
+their original admission contract and do not claim constant-time execution.
+
+For explicit identifier-free resident login, enable `risk.PolicyConfig`'s
+`PasskeyDiscovery` at trusted startup in the actual durable PostgreSQL risk
+composition, then call `DiscoverableAuthenticationOptions` and
+`DiscoverableSignin` with the identifier-free request/completion types. Reuse
+`PrepareFlow`/`IssueFlow`; the original cookie, remember choice and absolute
+expiry remain authoritative. Options neither select nor require an account,
+user handle, email or credential descriptor. Risk counts the real anonymous
+tenant/network/device dimensions without fabricating an identifier. Missing
+opt-in fails closed. After genuine cryptographic credential/handle verification,
+native mapping and public identity/MFA/policy owners admit the current target;
+its captured epochs are fenced through commit. Existing identified or
+suppressed ceremonies cannot be promoted into this mode, and discoverable
+ceremonies cannot switch into identified completion. This profile adds no
+signup, conditional UI or secondary-MFA fallback.
+
 The genuine protocol verifier alone admits the assertion. Ceremony consumption,
 counter/backup transition, mapping last-use, original browser-flow consumption
 and new session/audit/lifecycle effects share the existing coordinator Work.
@@ -87,7 +103,7 @@ real owner constraints, denial, contention, required-effect rollback and actual
 before/after-COMMIT connection loss. Existing active session rows are explicit
 fixture input, not evidence of signup/signin provenance. External public-
 consumer qualification, independent final review and full release
-qualification remain unfinished. The selected identified flow does not enable
-passkey-first signup, identifier-free login, completed MFA, organization authority,
+qualification remain unfinished. The selected flows do not enable
+passkey-first signup, completed MFA, organization authority,
 rename/delete, HTTP/reference routes or a UI. Those retained goals remain work;
 no complete authentication backend is claimed by this adapter yet.

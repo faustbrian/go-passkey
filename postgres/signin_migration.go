@@ -12,9 +12,10 @@ import (
 // existing passkey mapping history. Version is a permanent free slot greater
 // than one. The row binds existing WebAuthn ceremony to original browser flow
 // and owner epochs; it stores no challenge, consumption state, proof, session
-// or command journal. A NULL user is original suppressed admission, never an
-// authenticating placeholder. Owner histories remain separate. Forward-only,
-// no IO. This experimental suffix has not been published previously.
+// or command journal. A NULL user is original suppressed identified admission
+// or explicit account-independent discovery, never an authenticating placeholder.
+// Their admission encodings are distinct. Owner histories remain separate.
+// Forward-only, no IO; previously published SQL remains unchanged.
 type SigninMigrationSource struct{ Version migrations.Version }
 
 // Load validates allocation and returns one owned transactional suffix. Apply

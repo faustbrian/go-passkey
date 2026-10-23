@@ -2,6 +2,15 @@
 
 ## Unreleased
 
+- Add explicitly selected identifier-free resident UV/ES256 signin with genuinely
+  account-independent options and the risk owner's trusted anonymous-profile
+  opt-in. The root-verified credential and opaque handle jointly select the
+  current native identity/factor authority before atomic session issuance.
+  Preserve original browser/remember/expiry custody, reveal-once issuance,
+  metadata-only recovery and existing identified admission; ceremonies cannot
+  switch between those modes.
+  Reuse the existing installed signin context history. Signup, conditional UI
+  and secondary-MFA fallback remain outside this selected profile.
 - Add forward-only RP/handle/credential mapping history with RP-wide
   uniqueness and exact tenant/user partitions. Add current passkey session
   authority using the existing MFA owner, without adopting newer generations.

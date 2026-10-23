@@ -34,8 +34,10 @@ import (
 // from the original session-owned flow. Dependencies are borrowed and must
 // outlive calls. Install existing owner histories plus SigninMigrationSource.
 // Options use account-independent resident discovery, but the original verified
-// email is mandatory at completion. No signup, identifier-free signin,
-// completed-MFA or organization profile is enabled.
+// email is mandatory at completion through the identified methods. The additive
+// Discoverable methods explicitly select identifier-free signin with the risk
+// owner's startup opt-in. No signup, completed-MFA or organization profile is
+// enabled.
 type SigninConfig struct {
 	Protocol      webauthn.Config
 	Profile       sessionpg.PasskeyAdmissionConfig
@@ -231,6 +233,10 @@ func (s *SigninService) IssueFlow(ctx context.Context, p session.PreparedPreAuth
 }
 
 func (s *SigninService) prepare(ctx context.Context, r SigninRequest, finish bool) (*signinInvocation, error) {
+	return s.prepareProfile(ctx, r, finish, false)
+}
+
+func (s *SigninService) prepareProfile(ctx context.Context, r SigninRequest, finish, discoverable bool) (*signinInvocation, error) {
 	if ctx == nil || s == nil || s.config == nil {
 		return nil, identity.InvalidInputError{Field: "passkey_signin"}
 	}
@@ -239,7 +245,7 @@ func (s *SigninService) prepare(ctx context.Context, r SigninRequest, finish boo
 	if _, err := identity.ParseCommandID(string(r.CommandID)); err != nil {
 		return nil, err
 	}
-	if r.Origin != c.Flow.Origin || len(r.Network) == 0 || len(r.Network) > 128 || len(r.Device) == 0 || len(r.Device) > 128 || len(r.Identifier) == 0 || len(r.Identifier) > 320 || len(r.CorrelationID) == 0 || len(r.CorrelationID) > 128 {
+	if r.Origin != c.Flow.Origin || len(r.Network) == 0 || len(r.Network) > 128 || len(r.Device) == 0 || len(r.Device) > 128 || !discoverable && (len(r.Identifier) == 0 || len(r.Identifier) > 320) || discoverable && r.Identifier != "" || len(r.CorrelationID) == 0 || len(r.CorrelationID) > 128 {
 		return nil, identity.ForbiddenError{}
 	}
 	flow, err := sessionpg.ReadPreAuth(ctx, s.pool.Raw(), c.Repository, c.Protocol.TenantID, r.FlowID)
@@ -258,9 +264,12 @@ func (s *SigninService) prepare(ctx context.Context, r SigninRequest, finish boo
 	if err != nil || flow.Check(c.Clock.Now(), fs.Binding, digest) != nil {
 		return nil, identity.ForbiddenError{}
 	}
-	h := hmac.New(sha256.New, c.IdentifierKey)
-	_, _ = h.Write([]byte("passkey-identified-email-v1\x00" + string(c.Protocol.TenantID) + "\x00" + r.Identifier))
-	identifier := hex.EncodeToString(h.Sum(nil))
+	identifier := ""
+	if !discoverable {
+		h := hmac.New(sha256.New, c.IdentifierKey)
+		_, _ = h.Write([]byte("passkey-identified-email-v1\x00" + string(c.Protocol.TenantID) + "\x00" + r.Identifier))
+		identifier = hex.EncodeToString(h.Sum(nil))
+	}
 	subject := risk.Subject{Network: r.Network, Device: r.Device, IdentifierDigest: identifier}
 	scope := risk.Context{Tenant: string(c.Protocol.TenantID), Operation: risk.Action(op.OperationID), Attempt: string(r.CommandID)}
 	// identity.security.v1's risk subset admits anonymous/human/system actors,
@@ -278,7 +287,10 @@ func (s *SigninService) prepare(ctx context.Context, r SigninRequest, finish boo
 	if err != nil || !directory.Enabled {
 		return nil, identity.ForbiddenError{}
 	}
-	p := &signinInvocation{Store: s.protocol, service: s, request: r, operation: op, flow: flow, cookie: digest, directory: directory, risk: riskAdmission, identifier: identifier}
+	p := &signinInvocation{Store: s.protocol, service: s, request: r, operation: op, flow: flow, cookie: digest, directory: directory, risk: riskAdmission, identifier: identifier, discoverable: discoverable}
+	if discoverable {
+		return p, nil
+	}
 	// Options disclose no identity or credential descriptors. An ineligible
 	// original lookup is retained as non-authenticating admission, never a
 	// synthetic principal; later registration cannot promote that ceremony.

@@ -83,8 +83,8 @@ github.com/faustbrian/go-identity/phone v0.0.0-20261020215141-387cc56b91f6 h1:D+
 github.com/faustbrian/go-identity/phone v0.0.0-20261020215141-387cc56b91f6/go.mod h1:rQXIEiPXU/DMLt80tkafJnol/ayyUHFoS2ya3hVR1nE=
 github.com/faustbrian/go-identity/postgres v0.0.0-20261023160159-9a09aa4a9171 h1:VYRv2r6GDHQzethIjluopTdLZGjBkvNWuIZfWa/6m3c=
 github.com/faustbrian/go-identity/postgres v0.0.0-20261023160159-9a09aa4a9171/go.mod h1:m//LlYNUNgr+jJP2YDW0FQPdX8TOJkAsLTCIUYRtE60=
-github.com/faustbrian/go-identity/risk v0.0.0-20261023163947-9b97d1d4cb68 h1:J7fEvCvehYcR0iH+CM/oVOhOuhrKzkAr6PXs2715UQ4=
-github.com/faustbrian/go-identity/risk v0.0.0-20261023163947-9b97d1d4cb68/go.mod h1:zgNZ4X6AUlAWF12+6VIXijPginf0xGML8wBYVkv+FvY=
+github.com/faustbrian/go-identity/risk v0.0.0-20261023181921-a13a6825051c h1:rp9QQ9mM/IeBADyqvD22M4/jLP61lLYNj/5wAzarYq8=
+github.com/faustbrian/go-identity/risk v0.0.0-20261023181921-a13a6825051c/go.mod h1:zgNZ4X6AUlAWF12+6VIXijPginf0xGML8wBYVkv+FvY=
 github.com/faustbrian/go-identity/risk/postgres v0.0.0-20261023150127-219499bdccd5 h1:QPBt9Ey3yHG/2h3xpkwPkCRTb5J7YPlrFmyzU+EsagI=
 github.com/faustbrian/go-identity/risk/postgres v0.0.0-20261023150127-219499bdccd5/go.mod h1:dBRDsXRzOy6b0YI/fFJ4SJoDdEV0wV34Mjln5aNvrMo=
 github.com/faustbrian/go-identity/session v0.0.0-20261023150127-219499bdccd5 h1:tuzuTj/E/0hG6s0e1sjaUpqp11U+H70Xiw0p742Dg2I=
