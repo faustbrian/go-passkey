@@ -13,6 +13,21 @@ persistence.
 
 ## Current API
 
+- `SignupRequest`, `SignupCompletion`, `SignupResult` and
+  `KeyedSignupOptionsRequest` carry adapter-neutral intent and secret custody
+  for an explicitly enabled no-email/no-password passkey-first profile. They
+  cannot select a user, RP, tenant, actor or proof, and do not implement signup.
+  Keep the original session-owned flow, cookie and remember policy, trusted
+  ingress and each phase's original command on retries. Keyed options require
+  an empty incoming command ID and reuse `KeyedRegistrationOptionsResult`;
+  only its fresh committed winner may reveal options. Completion borrows raw
+  response bytes: the native owner must bound and copy them before parsing or
+  retaining them. Actual resident-required, UV-required, none-attestation,
+  ES256 verification must precede coherent account/credential/MFA/session
+  creation. No authentication or CSRF secret may be returned before acknowledged
+  commit or from an aborted, unknown or historical result. Implicit JSON/text
+  export is denied and ordinary formatting is redacted; explicit fields are
+  still sensitive and are not an audit or wire projection.
 - `DeleteRequest`/`DeleteResult` carry keyed self-user removal intent and original
   durability metadata only. Use the safe List reference and metadata version,
   leave primary command/record IDs empty and preserve exact input/custody on

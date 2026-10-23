@@ -2,6 +2,11 @@
 
 ## Unreleased
 
+- Add adapter-neutral passkey-first signup request, completion, session-result
+  and keyed-options carriers. They retain original flow and session-owned
+  custody, deny implicit JSON/text export and redact diagnostics. They are
+  prerequisites only: actual opt-in signup, verification and atomic durable
+  account/session creation remain native-owner work.
 - Add neutral keyed self-deletion request/result records. They preserve original
   signed-action/session custody and safe management versions; native removal
   requires current recovery authority. Results carry durability metadata only,
