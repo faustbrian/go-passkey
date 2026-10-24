@@ -63,8 +63,14 @@ func passkeyJourneyReadInventoryLogout(t *testing.T, f *signinFixture, issued Si
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, err := f.pool.Raw().Exec(f.ctx, history[len(history)-1].UpSQL()); err != nil {
-		t.Fatal("logout history", err)
+	var installed bool
+	if err := f.pool.Raw().QueryRow(f.ctx, `SELECT to_regclass('session_store.session_revocations') IS NOT NULL`).Scan(&installed); err != nil {
+		t.Fatal("logout history lookup", err)
+	}
+	if !installed {
+		if _, err := f.pool.Raw().Exec(f.ctx, history[len(history)-1].UpSQL()); err != nil {
+			t.Fatal("logout history", err)
+		}
 	}
 	executor, err := sessionpg.NewCookieRevokeOneExecutor(f.pool, sessionpg.RevokeOneExecutorConfig{Execution: sessionpg.IssueExecutorConfig{Repository: config.Repository, Profile: sessionpg.IssueAdmissionConfig{GlobalAuthorityID: config.Profile.GlobalAuthorityID, PolicyNamespace: config.Profile.PolicyNamespace, Audience: config.Profile.Audience, AuthenticationMethod: "password", CredentialKind: identity.CredentialPassword, CredentialOwner: "identity/password"}, Coordinator: config.Coordinator, Authorization: config.Authorization, Clock: config.Clock, PolicyID: config.Flow.PolicyID, PolicyVersion: config.Flow.PolicyVersion, AuditRetentionVersion: 1}, Sessions: reader, Passkey: &sessionpg.PasskeySessionAdmission{Profile: config.Profile, Authority: authority}}, []session.CSRFKey{f.csrf})
 	if err != nil {
@@ -114,7 +120,7 @@ func passkeyJourneyReadInventoryLogout(t *testing.T, f *signinFixture, issued Si
 		t.Fatal("logged-out credential disclosed inventory")
 	}
 	var revocations, audits, events int
-	if err := f.pool.Raw().QueryRow(f.ctx, `SELECT (SELECT count(*) FROM session_store.session_revocations WHERE session_id=$1),(SELECT count(*) FROM audit.records WHERE action='identity.session.revoke' AND outcome=$2),(SELECT count(*) FROM public.outbox_messages WHERE topic='session.revoked.v1')`, spec.SessionID, int64(audit.OutcomeSucceeded)).Scan(&revocations, &audits, &events); err != nil || revocations != 1 || audits != 1 || events != 1 {
+	if err := f.pool.Raw().QueryRow(f.ctx, `SELECT (SELECT count(*) FROM session_store.session_revocations WHERE session_id=$1),(SELECT count(*) FROM audit.records WHERE action='identity.session.revoke' AND outcome=$2 AND subject_id=$1),(SELECT count(*) FROM public.outbox_messages WHERE topic='session.revoked.v1' AND convert_from(payload,'UTF8')::jsonb->>'subject_id'=$1)`, spec.SessionID, int64(audit.OutcomeSucceeded)).Scan(&revocations, &audits, &events); err != nil || revocations != 1 || audits != 1 || events != 1 {
 		t.Fatal("logout required effects not coherent", err, revocations, audits, events)
 	}
 }

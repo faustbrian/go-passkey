@@ -2,6 +2,14 @@
 
 ## Unreleased
 
+- Add opt-in current-passkey-session label management without a password
+  credential or reusable proof. Original keyed options bind the session, target,
+  metadata version, label, RP, origin and network; a genuine UV assertion is
+  consumed atomically with the label CAS, protocol counter, current owners,
+  protected risk and required audit/lifecycle. Matching retries and uncertain
+  commits recover metadata only. Existing password-proof APIs remain unchanged;
+  HTTP/reference selection and passkey-only deletion are separate work.
+
 - Add explicit conditional assertion options, including keyed admission,
   through the existing discovery policy and protocol owners. Conditional
   presentation preserves original flow, UV, expiry, remember and reveal-once

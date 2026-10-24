@@ -3,6 +3,50 @@
 Experimental, incomplete and unreleased. The selected existing-account flow
 does not substitute for a complete passkey authentication platform.
 
+## Current-passkey-session label management
+
+`NewSessionManagementService` explicitly enables label rename under a real
+current passkey session, without password configuration or a separately issued
+reauthentication proof. Supply `SessionManagementConfig` with the existing
+protocol, passkey admission profile, session validation/repository, request-key,
+coordinator, authorization, protected risk and clock owners. Configuration is
+frozen; the borrowed pool and collaborators must outlive calls. Each call has
+the protocol's bounded 1ms–5s budget. Install the existing mapping, signin-context
+and metadata histories plus the selected request-key/session/MFA/risk/audit/
+outbox histories; this profile adds no migration or parallel proof store.
+
+1. Read safe credential references and positive metadata versions through
+   `InventoryService` under the current session.
+2. Call `UpdateOptions` with `passkey.SessionUpdateOptionsRequest`: actual
+   session custody, a self-user `identity.passkey.update` authorization context,
+   target reference/version, intended label, trusted origin/network and one
+   original idempotency key. Transfer the returned genuine assertion options
+   once. They require fresh UV from the session's authenticating credential.
+3. Complete the authenticator response through `Update` with
+   `passkey.SessionUpdateCompletion`, preserving that original request and
+   ceremony ID but using a **distinct completion idempotency key**. Both phases
+   occupy the same protected update namespace, so one key cannot represent both
+   request bodies. The native owner verifies the actual assertion; session
+   freshness timestamps or caller-supplied booleans grant no permission.
+4. The sole coordinator atomically consumes the ceremony/counter transition,
+   current directory/session/factor/passkey/policy fences, label metadata CAS,
+   protected mutation counters, audit and rename lifecycle. No new session or
+   reusable proof is issued; inventory and subsequent signin keep working.
+
+Select bearer **or** cookie transport in configuration. Cookie selection
+requires retained original CSRF keys and each request's actual synchronizer
+token; bearer selection accepts no CSRF material. An assertion cannot move to a
+sibling session, target/version/label, RP, origin or network. A matching retry
+requires current authenticated custody and returns the original receipt only,
+never another challenge, assertion, secret or mutation. After an uncertain
+COMMIT, retry the same original request/key: recovery classifies the original
+outcome without re-executing it. A different request needs a different key.
+
+This native profile does not expose HTTP endpoints, implement browser UI or
+certify authenticator/browser interoperability. Existing password-proof rename
+remains supported. Passkey-only deletion/recovery, additional enrollment and
+MFA/organization variants remain separate required profiles.
+
 ## Conditional assertion option generation
 
 `ConditionalAuthenticationOptions` and
