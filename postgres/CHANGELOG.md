@@ -2,6 +2,14 @@
 
 ## Unreleased
 
+- Add explicit current-passkey-session UV removal with an independently usable
+  resident ES256 key, atomic protocol/reference/mapping removal and affected
+  passkey-session invalidation. Last-key removal and stale/substituted authority
+  deny. Preserve original options/completion keys and metadata-only recovery
+  under a newly authenticated surviving-key session. Install WebAuthn migration
+  6 and selected kernel/MFA admissions before use; password-proof removal and
+  independent password-session authority remain unchanged.
+
 - Add `RegistrationOptionsForDelivery`, preserving the existing B API while
   exposing its genuine original UV authorization expiry alongside fresh options.
   B's later protocol TTL cannot substitute for that final delivery ceiling.

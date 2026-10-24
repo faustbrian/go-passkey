@@ -3,6 +3,53 @@
 Experimental, incomplete and unreleased. The selected existing-account flow
 does not substitute for a complete passkey authentication platform.
 
+## Current-session removal with another resident key
+
+Explicitly construct `NewSessionDeletionService(pool, SessionDeletionConfig)`
+with the actual current passkey-session, CSRF, policy, risk and protocol owners
+used by session management. This closed ES256 profile requires another usable
+resident key; it never invents password, email or OTP recovery. The existing
+password-proof `DeletionService` remains separate and unchanged.
+
+Install the selected kernel/MFA/passkey histories and WebAuthn migration 6
+before selecting it. The native module supplies no HTTP routes by itself.
+
+1. Build `passkey.NewSessionDeleteRequest` with the current session credential,
+   original cookie CSRF when selected, self-user delete caller, safe inventory
+   reference/metadata version and trusted ingress. Call `DeleteOptions` with
+   an original `IdempotencyKey`.
+2. Obtain genuine UV for those identified options. Call `Delete` with
+   `passkey.NewSessionDeleteCompletion`, unchanged intent, the original ceremony
+   and a **different** completion key. Do not substitute a reusable proof or
+   a signin assertion. Kernel reference and protocol versions are independent
+   of the inventory metadata version.
+3. The sole Work consumes the assertion and erases the target protocol key,
+   disables its reserved kernel reference, revokes its mapping and advances
+   this RP/user's passkey generation with required audit/lifecycle effects.
+   A genuine current protocol key, original resident registration provenance
+   and active native/kernel mapping must remain independently usable.
+
+Removal may target the authenticating key or a sibling. Last-key removal,
+changed intent/current authority, missing provenance and expiry deny atomically.
+Existing passkey sessions bound to this generation deny on their next current
+read; earlier positive evidence retains its original twenty-second ceiling.
+Independent password-session authority is unchanged. No authenticator-local
+erasure is claimed, and reserved RP-wide credential IDs cannot be re-enrolled.
+
+Fresh success acknowledges only the original authenticated invocation; it does
+not make its now-invalid session usable again. Preserve command, keys and input
+on unknown outcomes. After authenticating with the surviving key, use
+`RecoverDelete` and the original command/target query for metadata-only recovery.
+It never repeats removal, reveals a session or renews old authority. Options
+retries under a still-valid source are metadata-only and disclose no new options.
+Metadata delivery rechecks that invocation's original positive-read deadline;
+history lookup cannot renew it. Canceled or deadline-exceeded preparation reads
+retain their context error classification instead of becoming eligibility denials.
+
+Registration provenance must remain available while a key is eligible for this
+profile. Missing history fails closed. This selected native behavior does not
+claim HTTP composition, browser interoperability or full passkey qualification.
+
 ## Additional resident key under a passkey session
 
 Select `NewSessionEnrollmentService(pool, SessionEnrollmentConfig{...})` with

@@ -15,23 +15,23 @@ require (
 	github.com/faustbrian/go-identity/delivery v0.0.0-20261015061706-1f0b46ab1053
 	github.com/faustbrian/go-identity/delivery/postgres v0.0.0-20261015104034-f16881100907
 	github.com/faustbrian/go-identity/email v0.0.0-20261018110349-e38aa409e7d8
-	github.com/faustbrian/go-identity/mfa/postgres v0.0.0-20261024071149-c5e2482fbeaa
+	github.com/faustbrian/go-identity/mfa/postgres v0.0.0-20261024095621-93c437eacd90
 	github.com/faustbrian/go-identity/password v0.0.0-20261023192729-324d7aeea43e
 	github.com/faustbrian/go-identity/password/postgres v0.0.0-20261023214952-58d491b11060
-	github.com/faustbrian/go-identity/postgres v0.0.0-20261024072117-e44c3d63414a
+	github.com/faustbrian/go-identity/postgres v0.0.0-20261024095621-93c437eacd90
 	github.com/faustbrian/go-identity/risk v0.0.0-20261024004351-b030e8e364ac
 	github.com/faustbrian/go-identity/risk/postgres v0.0.0-20261024005826-5910465e0e2e
 	github.com/faustbrian/go-identity/session v0.0.0-20261024003536-1d7f8729fe0e
 	github.com/faustbrian/go-identity/session/postgres v0.0.0-20261024050052-37d8da3902c2
 	github.com/faustbrian/go-migrations/v3 v3.1.1-0.20261015110643-ca105f265cfc
-	github.com/faustbrian/go-passkey v0.0.0-20261024071202-2aeb513a8aeb
+	github.com/faustbrian/go-passkey v0.0.0-20261024094420-5bca8c5c1348
 	github.com/faustbrian/go-password/v2 v2.0.2-0.20261015050515-4eb0fefa60ff
 	github.com/faustbrian/go-postgres v1.1.1-0.20260912090843-61261695bcc7
 	github.com/faustbrian/go-secret-envelope/v2 v2.0.1
 	github.com/faustbrian/go-transactional-outbox/postgres/identity v0.0.0-20261024010627-e45fa7048f38
 	github.com/faustbrian/go-transactional-outbox/v2 v2.1.1-0.20261022172917-6ed5e0861542
 	github.com/faustbrian/go-webauthn v0.0.0-20261020074004-ed89b240ab20
-	github.com/faustbrian/go-webauthn/postgres v0.0.0-20261024072814-eb85721e7638
+	github.com/faustbrian/go-webauthn/postgres v0.0.0-20261024100942-ac9b461de6d8
 	github.com/jackc/pgx/v5 v5.11.0
 )
 
