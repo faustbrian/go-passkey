@@ -13,6 +13,13 @@ persistence.
 
 ## Current API
 
+- `ConditionalAssertionOptions` explicitly projects an existing anonymous
+  discoverable assertion as `{mediation:"conditional",publicKey:...}`. It
+  retains the protocol owner's original ceremony, UV requirements, expiry and
+  reveal-once challenge custody; copies share the same reveal. It is not a new
+  server authentication mode or proof that a browser used conditional UI.
+  Native conditional option methods and ordinary `DiscoverableSignin` compose
+  the real session path; browser UI and interoperability remain separate.
 - `SignupRequest`, `SignupCompletion`, `SignupResult` and
   `KeyedSignupOptionsRequest` carry adapter-neutral intent and secret custody
   for an explicitly enabled no-email/no-password passkey-first profile. They

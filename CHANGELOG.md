@@ -2,6 +2,11 @@
 
 ## Unreleased
 
+- Add explicit conditional browser assertion options over the existing
+  discoverable protocol. The projection adds outer conditional mediation while
+  retaining the original ceremony, public-key options and one-reveal challenge
+  custody. Keyed results preserve original command metadata without creating
+  another assertion, authentication mode or replay authority.
 - Add a redacted, nonserializable signup ceremony rate request retaining only
   borrowed original signup custody and the committed ceremony reference.
 - Add adapter-neutral passkey-first signup request, completion, session-result
