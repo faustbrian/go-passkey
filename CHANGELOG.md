@@ -2,6 +2,12 @@
 
 ## Unreleased
 
+- Add opaque current-passkey-session removal request/completion custody and
+  durability projection. Options and completion retain distinct original keys
+  under the deletion action; native owners must supply genuine UV, atomic
+  removal and last-recovery-path enforcement. These carriers grant no authority
+  and preserve the existing password-proof deletion API.
+
 - Add non-serializable current-session enrollment command carriers. Assertion
   options and authorization retain distinct original keys; single-use
   registration retains its original command and ceremony identity without a
