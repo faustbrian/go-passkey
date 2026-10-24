@@ -46,7 +46,7 @@ func (s *EnrollmentService) RegistrationRateSource(ctx context.Context, r passke
 	if err := s.pool.Raw().QueryRow(ctx, `SELECT clock_timestamp()`).Scan(&now); err != nil {
 		return passkey.CeremonyRateSource{}, rateSourceError(ctx)
 	}
-	if err := readRateCeremony(ctx, s.protocol, s.config().Protocol, p.ceremonyContext(), r.CeremonyID, r.Origin, "create", now); err != nil {
+	if _, err := readRateCeremony(ctx, s.protocol, s.config().Protocol, p.ceremonyContext(), r.CeremonyID, r.Origin, "create", now); err != nil {
 		return passkey.CeremonyRateSource{}, rateSourceError(ctx)
 	}
 	return passkey.CeremonyRateSource{CeremonyID: r.CeremonyID, Lifetime: originalCeremonyLifetime, Kind: passkey.RateSourceUser, UserID: p.record.UserID}, nil
@@ -69,6 +69,36 @@ func (s *SigninService) DiscoverableSigninRateSource(ctx context.Context, r pass
 	return s.signinRateSource(ctx, discoverableSigninRequest(r.DiscoverableSigninRequest), r.CeremonyID, true)
 }
 
+// SignupRateSource authenticates original signup cookie/flow possession, current
+// directory authority and canonical prospective registration context. It returns
+// only anonymous-flow metadata: no user is authenticated or exposed. No risk,
+// command, proof, challenge, account or session state is created or consumed.
+// Metadata never renews the ceremony or authorizes Signup, which revalidates and
+// consumes atomically. Calls borrow the native pool and are bounded/cancelable.
+func (s *SignupService) SignupRateSource(ctx context.Context, r passkey.SignupCeremonyRateRequest) (passkey.CeremonyRateSource, error) {
+	if ctx == nil || s == nil || s.core == nil || s.core.config == nil || s.core.pool == nil {
+		return passkey.CeremonyRateSource{}, identity.InvalidInputError{Field: "passkey_rate_source"}
+	}
+	ctx, stop := context.WithTimeout(ctx, s.core.config().Protocol.MaximumDuration)
+	defer stop()
+	if _, err := identity.ParseCommandID(r.CeremonyID); err != nil {
+		return passkey.CeremonyRateSource{}, rateSourceError(ctx)
+	}
+	p, err := s.prepare(ctx, r.SignupRequest, true)
+	if err != nil {
+		return passkey.CeremonyRateSource{}, rateSourceError(ctx)
+	}
+	p.ceremonyID = r.CeremonyID
+	if err := p.readContext(ctx); err != nil {
+		return passkey.CeremonyRateSource{}, rateSourceError(ctx)
+	}
+	record, err := readRateCeremony(ctx, s.core.protocol, s.core.config().Protocol, p.ceremonyContext(), r.CeremonyID, r.Origin, "create", s.core.config().Clock.Now())
+	if err != nil || !bytes.Equal(record.Intent.UserHandle, p.handle) || len(record.Intent.AllowedCredentials) != 0 {
+		return passkey.CeremonyRateSource{}, rateSourceError(ctx)
+	}
+	return passkey.CeremonyRateSource{CeremonyID: r.CeremonyID, Lifetime: originalCeremonyLifetime, Kind: passkey.RateSourceAnonymousFlow, AnonymousFlowID: r.FlowID}, nil
+}
+
 func (s *SigninService) signinRateSource(ctx context.Context, r SigninRequest, ceremonyID string, discoverable bool) (passkey.CeremonyRateSource, error) {
 	if ctx == nil || s == nil || s.config == nil || s.pool == nil {
 		return passkey.CeremonyRateSource{}, identity.InvalidInputError{Field: "passkey_rate_source"}
@@ -89,7 +119,7 @@ func (s *SigninService) signinRateSource(ctx context.Context, r SigninRequest, c
 	if err := p.readRateContext(ctx); err != nil {
 		return passkey.CeremonyRateSource{}, rateSourceError(ctx)
 	}
-	if err := readRateCeremony(ctx, s.protocol, s.config().Protocol, p.ceremonyContext(), ceremonyID, r.Origin, "get-discoverable", s.config().Clock.Now()); err != nil {
+	if _, err := readRateCeremony(ctx, s.protocol, s.config().Protocol, p.ceremonyContext(), ceremonyID, r.Origin, "get-discoverable", s.config().Clock.Now()); err != nil {
 		return passkey.CeremonyRateSource{}, rateSourceError(ctx)
 	}
 	result := passkey.CeremonyRateSource{CeremonyID: ceremonyID, Lifetime: originalCeremonyLifetime}
@@ -136,25 +166,25 @@ func (p *signinInvocation) readRateContext(ctx context.Context) error {
 // update rather than deriving a fresh duration from the time of this read.
 const originalCeremonyLifetime = 5 * time.Minute
 
-func readRateCeremony(ctx context.Context, store *webauthnpg.Store, c webauthn.Config, scope webauthn.CeremonyContext, id, origin, kind string, now time.Time) error {
+func readRateCeremony(ctx context.Context, store *webauthnpg.Store, c webauthn.Config, scope webauthn.CeremonyContext, id, origin, kind string, now time.Time) (webauthn.CeremonyRecord, error) {
 	if _, err := identity.ParseCommandID(id); err != nil || !slices.Contains(c.RelyingParty.Origins, origin) {
-		return identity.ForbiddenError{}
+		return webauthn.CeremonyRecord{}, identity.ForbiddenError{}
 	}
 	record, err := store.LoadCeremony(ctx, webauthn.Lookup{Context: scope, RPID: c.RelyingParty.ID, CeremonyID: id})
 	if err != nil {
-		return identity.ForbiddenError{}
+		return webauthn.CeremonyRecord{}, identity.ForbiddenError{}
 	}
 	i := record.Intent
 	if (i.Algorithms == nil) != (c.Algorithms == nil) {
-		return identity.ForbiddenError{}
+		return webauthn.CeremonyRecord{}, identity.ForbiddenError{}
 	}
 	if record.ID != id || string(i.Context.CommandID) != id || record.Version != 1 || i.Kind != kind || i.Context.TenantID != scope.TenantID || i.Context.UserID != scope.UserID || i.Context.ActorID != scope.ActorID || i.Context.AnonymousFlowID != scope.AnonymousFlowID || i.RPID != c.RelyingParty.ID || i.RPVersion != c.RelyingParty.Version || i.Origin != origin || i.Extensions != c.Extensions || !slices.Equal(i.Algorithms, c.Algorithms) || record.ChallengeDigest == ([32]byte{}) || record.ExpiresAt.IsZero() || !now.Before(record.ExpiresAt) || now.Before(record.ExpiresAt.Add(-originalCeremonyLifetime)) {
-		return identity.ForbiddenError{}
+		return webauthn.CeremonyRecord{}, identity.ForbiddenError{}
 	}
 	if kind == "create" && (len(i.UserHandle) != 32 || !i.ResidentKeyRequired) || kind == "get-discoverable" && (len(i.UserHandle) != 0 || len(i.AllowedCredentials) != 0 || i.ResidentKeyRequired) {
-		return identity.ForbiddenError{}
+		return webauthn.CeremonyRecord{}, identity.ForbiddenError{}
 	}
-	return nil
+	return record, nil
 }
 
 func rateSourceError(ctx context.Context) error {

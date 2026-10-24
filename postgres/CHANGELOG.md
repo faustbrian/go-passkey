@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+- Add read-only signup ceremony rate sources bound to genuine original browser
+  custody, current directory and canonical prospective registration context.
+  Return only anonymous-flow metadata with the original five-minute lifetime;
+  reads neither expose prospective users nor admit risk or consume/create state.
 - Add explicitly selected native passkey-only signup, original pre-auth cookie
   and remember custody, genuine resident/UV registration and atomic account,
   credential, RP mapping, known-empty MFA, authorization and session creation.

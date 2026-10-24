@@ -159,12 +159,20 @@ existing field/diagnostic/serialization behavior are unchanged. Reflection now
 reports their root defining package. No pool, SQL or native configuration has
 moved into the neutral module.
 
-`RegistrationRateSource`, `SigninRateSource` and
-`DiscoverableSigninRateSource` authenticate the original source custody and
-return sensitive original rate metadata only. Supply the genuine completion
+`RegistrationRateSource`, `SigninRateSource`,
+`DiscoverableSigninRateSource` and `SignupRateSource` authenticate original
+source custody and return sensitive original rate metadata only. Supply genuine completion
 phase's session/action proof for registration, or the original browser cookie,
 flow and exact identified/identifier-free mode for signin. The retained native
 admission must match the original committed ceremony and trusted deployment.
+Signup reads require the original live signup cookie/flow, configured origin,
+current directory generations, canonical prospective registration context and
+matching native create ceremony. They return only the original anonymous flow,
+ceremony ID and immutable five-minute policy lifetime, never the prospective
+user or handle. Device/network remain bounded trusted ingress, not additional
+original-flow authentication factors. No risk admission, command, challenge,
+proof, account or session is created or consumed. `Signup` still revalidates
+all current authority and consumes the original flow/ceremony atomically.
 Identified metadata returns the exact original canonical identifier even when
 its original account lookup was suppressed; it never projects account
 eligibility or a resolved user. Identifier-free metadata returns only its
