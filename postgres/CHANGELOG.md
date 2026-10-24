@@ -2,6 +2,12 @@
 
 ## Unreleased
 
+- Expose original session-enrollment ceremony rate metadata through
+  `SessionRegistrationRateSource`. Authenticate current session/CSRF and exact
+  native intent against genuine assertion/registration records, without command
+  admission, risk charging, consumption or expiry renewal. This is a read-only
+  input to canonical HTTP verification throttling, not completion authority.
+
 - Add explicitly selected additional resident-passkey enrollment under a current
   passkey session, without password proofs. Genuine action-bound UV consumes the
   assertion and creates registration options in one transaction; finalization

@@ -51,6 +51,16 @@ expiry remains the ceiling for B and C; the later registration protocol TTL
 cannot extend it. No session, device cookie, password fallback or renewed proof
 is issued. The original session and both valid authenticators remain usable.
 
+Before a transport admits C to its canonical challenge-verification budget, call
+`SessionRegistrationRateSource(ctx, originalRequest, bCeremonyID)`. The request
+uses the exact original intent, actual session/CSRF and `register-verify` caller.
+This authenticates native retained intent and genuine A/B records, returning
+only the original user/ceremony dimensions and fixed five-minute policy duration
+(not remaining TTL or a validity lease). Repeated reads create no command/risk/
+protocol effects and consume nothing. Original A expiry remains the ceiling;
+`Register` still independently verifies, revalidates and consumes atomically.
+Historical consumed metadata may remain readable only under current custody.
+
 After uncertainty preserve the exact A/B keys or C command, ceremony and input;
 never allocate a replacement to escape an unknown result. Reserved/committed
 history returns metadata only. If the reservation never committed, an unchanged

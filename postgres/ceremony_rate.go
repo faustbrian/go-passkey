@@ -14,6 +14,65 @@ import (
 	webauthnpg "github.com/faustbrian/go-webauthn/postgres"
 )
 
+// SessionRegistrationRateSource authenticates current completion-action session
+// and original enrollment intent before returning the B ceremony's user rate
+// metadata. It reads genuine A/B records and retains A's absolute expiry; a
+// later registration TTL cannot renew authorization. It issues no proof, options,
+// command reservation or risk admission and consumes nothing. Historical consumed
+// metadata may remain readable, but Register independently revalidates all
+// authority and atomically consumes. Custody is borrowed for the call; the pool
+// and owners must outlive concurrent calls. Earlier cancellation takes precedence
+// over Protocol.MaximumDuration. Denial returns no metadata.
+func (s *SessionEnrollmentService) SessionRegistrationRateSource(ctx context.Context, custody passkey.SessionEnrollmentRequest, ceremonyID string) (passkey.CeremonyRateSource, error) {
+	if ctx == nil || s == nil || s.owner == nil {
+		return passkey.CeremonyRateSource{}, identity.InvalidInputError{Field: "passkey_rate_source"}
+	}
+	c := s.owner.config()
+	ctx, stop := context.WithTimeout(ctx, c.Protocol.MaximumDuration)
+	defer stop()
+	r, err := custody.Bindings()
+	if err != nil || len(r.Network) == 0 || len(r.Network) > 128 || len(r.Origin) == 0 || len(r.Origin) > 2048 || !slices.Contains(c.Protocol.RelyingParty.Origins, r.Origin) {
+		return passkey.CeremonyRateSource{}, rateSourceError(ctx)
+	}
+	if _, err := identity.ParseCommandID(ceremonyID); err != nil {
+		return passkey.CeremonyRateSource{}, rateSourceError(ctx)
+	}
+	read, record, err := s.owner.authenticateAction(ctx, passkey.SessionUpdateRequest{Credential: r.Credential, CSRFToken: r.CSRFToken, Caller: r.Caller}, "identity.passkey.register-verify")
+	if err != nil {
+		return passkey.CeremonyRateSource{}, rateSourceError(ctx)
+	}
+	// Unlike prepare, this projection never resolves a request key or observes/
+	// recovers a command. The existing original-context reader performs only IO
+	// reads and matches the actual session, profile, intent and credential handle.
+	p := &sessionEnrollmentInvocation{service: s, request: r, read: read, record: record, stage: 2, id: identity.CommandID(ceremonyID), ceremonyID: ceremonyID}
+	if err := p.prepareOriginal(ctx); err != nil {
+		return passkey.CeremonyRateSource{}, rateSourceError(ctx)
+	}
+	var now time.Time
+	if err := s.owner.pool.Raw().QueryRow(ctx, `SELECT clock_timestamp()`).Scan(&now); err != nil || !now.Before(p.ceiling) || !c.Clock.Now().Before(p.ceiling) {
+		return passkey.CeremonyRateSource{}, rateSourceError(ctx)
+	}
+	registration, err := readRateCeremony(ctx, s.owner.protocol, c.Protocol, p.protocolContext(), ceremonyID, r.Origin, "create", now)
+	if err != nil || !bytes.Equal(registration.Intent.UserHandle, p.authProtocol.UserHandle) {
+		return passkey.CeremonyRateSource{}, rateSourceError(ctx)
+	}
+	assertion, err := readRateCeremony(ctx, s.owner.protocol, c.Protocol, p.protocolContext(), p.parent.Parent, r.Origin, "get", now)
+	if err != nil || !assertion.ExpiresAt.Equal(p.ceiling) || !bytes.Equal(assertion.Intent.UserHandle, p.authProtocol.UserHandle) || len(assertion.Intent.AllowedCredentials) != 1 || !bytes.Equal(assertion.Intent.AllowedCredentials[0], p.authProtocol.ID) {
+		return passkey.CeremonyRateSource{}, rateSourceError(ctx)
+	}
+	// Both protocol reads can cross an expiry boundary. A session observation
+	// remaining valid does not extend either ceremony, so sample time again only
+	// after those reads and fence each original expiry before disclosing metadata.
+	if err := s.owner.pool.Raw().QueryRow(ctx, `SELECT clock_timestamp()`).Scan(&now); err != nil || !p.rateFresh(now, c.Clock.Now(), registration.ExpiresAt) || ctx.Err() != nil {
+		return passkey.CeremonyRateSource{}, rateSourceError(ctx)
+	}
+	return passkey.CeremonyRateSource{CeremonyID: ceremonyID, Lifetime: originalCeremonyLifetime, Kind: passkey.RateSourceUser, UserID: record.UserID}, nil
+}
+
+func (p *sessionEnrollmentInvocation) rateFresh(databaseNow, observedNow, registrationExpiry time.Time) bool {
+	return databaseNow.Before(p.ceiling) && observedNow.Before(p.ceiling) && databaseNow.Before(registrationExpiry) && observedNow.Before(registrationExpiry) && p.read.ValidateAt(databaseNow.UTC()) == nil && p.read.ValidateAt(observedNow.UTC()) == nil
+}
+
 // RegistrationRateSource authenticates genuine completion-phase session/action
 // custody and the original committed native ceremony context. It returns only
 // sensitive rate metadata, not a current-validity lease. Historical consumed
