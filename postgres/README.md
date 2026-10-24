@@ -3,6 +3,45 @@
 Experimental, incomplete and unreleased. The selected existing-account flow
 does not substitute for a complete passkey authentication platform.
 
+## Conditional assertion option generation
+
+`ConditionalAuthenticationOptions` and
+`KeyedConditionalAuthenticationOptions` explicitly select conditional browser
+presentation of the existing identifier-free assertion. Both require the
+existing risk owner's `PasskeyDiscovery` policy opt-in; keyed options also
+require `OptionsRequests`. They accept the existing discoverable requests and
+return root-owned conditional options. No synthetic identifier, separate
+ceremony/history, secondary verifier, new policy flag or fallback is introduced.
+
+The protocol interpretation follows [WebAuthn Level 3, CR 26 May 2026,
+§5.1.4](https://www.w3.org/TR/2026/CR-webauthn-3-20260526/#sctn-getAssertion):
+conditional mediation selects browser presentation on the outer request, not a
+different signed assertion or server verification protocol. `TransferJSON`
+reveals `{mediation:"conditional",publicKey:...}` once and preserves the entire
+native `publicKey`, including required UV and no account allowlist. A browser
+consumer checks conditional-mediation availability, deserializes `publicKey`
+with `PublicKeyCredential.parseRequestOptionsFromJSON` (or an equivalent
+supported decoder), and calls `navigator.credentials.get` with the explicit
+outer mediation. Browser capability checks, HTML autofill and actual UI remain
+the consumer's responsibility; no browser interoperability is certified here.
+
+Complete the returned genuine assertion through **`DiscoverableSignin`** and
+read original rate metadata through **`DiscoverableSigninRateSource`**. Original
+flow/cookie, tenant/RP, current identity/risk, expiry and remember policy remain
+unchanged. An open browser conditional request does not extend server expiry.
+The backend cannot authenticate which browser mediation was used. Conditional
+and ordinary discoverable presentations intentionally share one keyed command:
+matching retries, including switches between those presentations, recover only
+original metadata, never a replacement challenge. Identified signin remains a
+distinct immutable admission and cannot reuse that key or ceremony. Ambiguous
+options/completion retain existing metadata-only recovery without new secrets.
+
+Focused native PostgreSQL tests exercise conditional options through actual
+signed assertion verification, session read and logout for browser-only and
+persistent choices, plus policy/UV/expiry denial and replay. HTTP/Reference
+composition and real browser/platform/roaming-authenticator proof remain
+separate qualification boundaries.
+
 ## Explicit passkey-first signup
 
 `NewSignupService` selects a fixed tenant/RP's resident-required, UV-required,
@@ -67,8 +106,8 @@ go test -tags=integration -race -count=1 \
 
 Set `IDENTITY_POSTGRES_TEST_DSN` to that isolated cluster, never an existing
 application database. Tests create/drop their own databases and audit roles.
-Reference/HTTP composition, conditional signin and passkey-session management
-are distinct profiles; this native API alone does not claim them or full M16.
+Reference/HTTP composition, conditional option presentation and passkey-session
+management are distinct profiles; signup alone does not claim them or full M16.
 
 `NewDeletionService` selects native self-user removal under the existing
 single-factor password-session profile. `DeletionConfig.ManagementConfig`
@@ -116,7 +155,8 @@ without rechecking recovery, consuming another proof, repeating removal or
 projecting credentials. Revoked/expired original sessions cannot disclose it.
 Unknown COMMIT acknowledgement is not rollback; retain the original key and
 command. This API does not enable passkey-session management, passkey-first
-signup, conditional signin, HTTP composition or complete platform qualification.
+signup, conditional option presentation, HTTP composition or complete platform
+qualification.
 
 `MigrationSource` installs only identity-facing RP bindings, stable opaque
 handles, credential references, labels and original enrollment admission context.
@@ -300,8 +340,9 @@ opt-in fails closed. After genuine cryptographic credential/handle verification,
 native mapping and public identity/MFA/policy owners admit the current target;
 its captured epochs are fenced through commit. Existing identified or
 suppressed ceremonies cannot be promoted into this mode, and discoverable
-ceremonies cannot switch into identified completion. This profile adds no
-signup, conditional UI or secondary-MFA fallback.
+ceremonies cannot switch into identified completion. Conditional presentation
+uses this same discovery admission and completion, not a new server mode.
+This profile adds no signup, browser UI or secondary-MFA fallback.
 
 The genuine protocol verifier alone admits the assertion. Ceremony consumption,
 counter/backup transition, mapping last-use, original browser-flow consumption

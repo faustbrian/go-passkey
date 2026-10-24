@@ -2,6 +2,13 @@
 
 ## Unreleased
 
+- Add explicit conditional assertion options, including keyed admission,
+  through the existing discovery policy and protocol owners. Conditional
+  presentation preserves original flow, UV, expiry, remember and reveal-once
+  semantics and completes through genuine discoverable signin/session issuance.
+  Ordinary discovery shares its original keyed command; identified admission
+  remains distinct. No new migration, server protocol mode or browser-UI
+  certification is introduced.
 - Add read-only signup ceremony rate sources bound to genuine original browser
   custody, current directory and canonical prospective registration context.
   Return only anonymous-flow metadata with the original five-minute lifetime;
