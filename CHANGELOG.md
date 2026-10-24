@@ -2,6 +2,12 @@
 
 ## Unreleased
 
+- Add private-by-default current-session update request, keyed options and
+  assertion-completion carriers for native action-bound UV label management.
+  These data records grant no freshness or permission: the native owner must
+  verify the original assertion and finalize the mutation atomically. Existing
+  password-proof update records retain their API and behavior.
+
 - Add explicit conditional browser assertion options over the existing
   discoverable protocol. The projection adds outer conditional mediation while
   retaining the original ceremony, public-key options and one-reveal challenge
