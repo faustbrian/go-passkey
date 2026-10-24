@@ -18,6 +18,7 @@ func TestOriginalCeremonyRateDataRejectsImplicitDisclosure(t *testing.T) {
 		RegistrationCeremonyRateRequest{RegistrationRequest: RegistrationRequest{Origin: "https://private.example", Network: "private-network", Device: "private-device"}, CeremonyID: "private-ceremony"},
 		SigninCeremonyRateRequest{SigninRequest: SigninRequest{Identifier: "private@example.test", FlowID: "private-flow"}, CeremonyID: "private-ceremony"},
 		DiscoverableCeremonyRateRequest{DiscoverableSigninRequest: DiscoverableSigninRequest{FlowID: "private-flow"}, CeremonyID: "private-ceremony"},
+		SignupCeremonyRateRequest{SignupRequest: SignupRequest{FlowID: "private-flow", Origin: "https://private.example", Device: "private-device"}, CeremonyID: "private-ceremony"},
 	} {
 		for _, format := range []string{"%v", "%+v", "%#v", "%s", "%q"} {
 			want := fmt.Sprintf("%T(redacted)", value)

@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Add a redacted, nonserializable signup ceremony rate request retaining only
+  borrowed original signup custody and the committed ceremony reference.
 - Add adapter-neutral passkey-first signup request, completion, session-result
   and keyed-options carriers. They retain original flow and session-owned
   custody, deny implicit JSON/text export and redact diagnostics. They are

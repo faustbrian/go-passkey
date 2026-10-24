@@ -59,6 +59,9 @@ persistence.
   It is sensitive metadata, not an authentication result or validity lease.
   Consumed historical metadata cannot authorize another native mutation or
   reveal. Implicit JSON/text serialization and ordinary diagnostics redact it.
+  `SignupCeremonyRateRequest` borrows the original signup browser request and
+  committed ceremony ID; native reads return only the original anonymous-flow
+  dimension, never the prospective identity or an authenticated user.
 - `UserHandlePolicy.Generate` creates a random opaque 32-byte handle for first
   enrollment. Persist and reuse the first committed identity/RP mapping; never
   regenerate an existing handle on ordinary reads or retries.

@@ -65,6 +65,15 @@ type DiscoverableCeremonyRateRequest struct {
 	CeremonyID string
 }
 
+// SignupCeremonyRateRequest borrows original signup browser/flow custody and
+// the committed create ceremony. Its anonymous rate dimension authenticates no
+// user and never projects the prospective identity, handle or response. Native
+// Signup must still revalidate and consume current authority atomically.
+type SignupCeremonyRateRequest struct {
+	SignupRequest
+	CeremonyID string
+}
+
 func (CeremonyRateSource) Format(s fmt.State, _ rune) {
 	_, _ = s.Write([]byte("passkey.CeremonyRateSource(redacted)"))
 }
@@ -76,6 +85,9 @@ func (SigninCeremonyRateRequest) Format(s fmt.State, _ rune) {
 }
 func (DiscoverableCeremonyRateRequest) Format(s fmt.State, _ rune) {
 	_, _ = s.Write([]byte("passkey.DiscoverableCeremonyRateRequest(redacted)"))
+}
+func (SignupCeremonyRateRequest) Format(s fmt.State, _ rune) {
+	_, _ = s.Write([]byte("passkey.SignupCeremonyRateRequest(redacted)"))
 }
 
 // MarshalJSON prohibits implicit export of correlated original rate metadata.
@@ -111,5 +123,15 @@ func (DiscoverableCeremonyRateRequest) MarshalJSON() ([]byte, error) {
 
 // MarshalText prohibits implicit export of original browser custody.
 func (DiscoverableCeremonyRateRequest) MarshalText() ([]byte, error) {
+	return nil, session.ErrSecretSerialization
+}
+
+// MarshalJSON prohibits implicit export of original signup browser custody.
+func (SignupCeremonyRateRequest) MarshalJSON() ([]byte, error) {
+	return nil, session.ErrSecretSerialization
+}
+
+// MarshalText prohibits implicit export of original signup browser custody.
+func (SignupCeremonyRateRequest) MarshalText() ([]byte, error) {
 	return nil, session.ErrSecretSerialization
 }
