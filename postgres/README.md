@@ -35,6 +35,11 @@ protocol duration (1ms–5s), with earlier caller cancellation taking precedence
    its genuine assertion bytes. The native coordinator consumes that assertion/
    counter and creates registration together. Transfer the fresh resident-key
    options once; no reusable reauthentication proof is created.
+   A consumer buffering output through synchronous hooks instead calls
+   `RegistrationOptionsForDelivery` for the same B operation and its immutable
+   original A expiry. Check that nonzero expiry after hooks alongside actual
+   session/request validity and B's protocol expiry. The timestamp grants no
+   authority and is zero on replay/error; do not infer it from B's later TTL.
 4. Preserve intent and session, change the caller action to
    `identity.passkey.register-verify`, and call `Register` with
    `passkey.NewSessionEnrollmentCompletion(SessionEnrollmentCompletionSpec)`.

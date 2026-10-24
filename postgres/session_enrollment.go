@@ -283,33 +283,53 @@ func (s *SessionEnrollmentService) EnrollmentAssertionOptions(ctx context.Contex
 // resident registration options in the same B transaction. No reusable proof or
 // session is issued. Retries retain original durability and never reveal options.
 func (s *SessionEnrollmentService) RegistrationOptions(ctx context.Context, custody passkey.SessionEnrollmentAuthorization) (out passkey.KeyedRegistrationOptionsResult, err error) {
+	out, _, err = s.RegistrationOptionsForDelivery(ctx, custody)
+	return out, err
+}
+
+// RegistrationOptionsForDelivery performs the same B operation as
+// RegistrationOptions and additionally returns A's genuine original absolute
+// authorization expiry for a bounded consumer's final options-delivery check.
+// This immutable ceiling is not proof, current-validity evidence or an extension
+// of B's protocol TTL. Check it after synchronous hooks alongside actual session
+// and request validity. Only fresh acknowledged options include a nonzero value;
+// metadata-only retries and all errors return zero and reveal no options.
+func (s *SessionEnrollmentService) RegistrationOptionsForDelivery(ctx context.Context, custody passkey.SessionEnrollmentAuthorization) (out passkey.KeyedRegistrationOptionsResult, authorizationExpiry time.Time, err error) {
 	if ctx == nil || s == nil || s.owner == nil {
-		return out, identity.InvalidInputError{Field: "passkey_session_enrollment"}
+		return out, authorizationExpiry, identity.InvalidInputError{Field: "passkey_session_enrollment"}
 	}
 	r, err := custody.Bindings()
 	if err != nil {
-		return out, err
+		return out, authorizationExpiry, err
 	}
 	ctx, stop := context.WithTimeout(ctx, s.owner.config().Protocol.MaximumDuration)
 	defer stop()
 	p, observed, err := s.prepare(ctx, r.SessionEnrollmentRequest, r.IdempotencyKey, "", 1, r.CeremonyID, r.Response)
 	out.CommandID, out.Receipt, out.Replayed = observed.CommandID, observed.Receipt, observed.Replayed
 	if err != nil || observed.Replayed {
-		return out, err
+		return out, authorizationExpiry, err
 	}
 	protocol, err := webauthn.New(s.owner.config().Protocol, webauthn.Dependencies{Store: p})
 	if err != nil {
-		return out, err
+		return out, authorizationExpiry, err
 	}
 	_, err = protocol.VerifyAssertion(ctx, webauthn.VerifyAssertionRequest{Context: p.protocolContext(), CeremonyID: r.CeremonyID, Origin: p.request.Origin, Response: r.Response, ExpectedVersion: 1, ExpectedCredentialVersion: p.authProtocol.Version})
 	out.Receipt = p.result
 	if err == nil {
-		err = p.read.ValidateAt(s.owner.config().Clock.Now().UTC())
+		now := s.owner.config().Clock.Now().UTC()
+		err = p.read.ValidateAt(now)
+		if err == nil {
+			err = ctx.Err()
+		}
+		if err == nil && !now.Before(p.ceiling) {
+			err = identity.ForbiddenError{}
+		}
 		if err == nil {
 			out.Options = p.registrationOptions
+			authorizationExpiry = p.ceiling
 		}
 	}
-	return out, err
+	return out, authorizationExpiry, err
 }
 
 // Register consumes the genuine authorized B registration atomically with its

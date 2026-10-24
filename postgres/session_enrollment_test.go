@@ -23,6 +23,9 @@ func TestSessionEnrollmentRequiresActualOwnersAndPrivateConfiguration(t *testing
 			if out, err := s.RegistrationOptions(ctx, passkey.SessionEnrollmentAuthorization{}); err == nil || out.CommandID != "" {
 				t.Fatal("empty owner/context authorized enrollment")
 			}
+			if out, expiry, err := s.RegistrationOptionsForDelivery(ctx, passkey.SessionEnrollmentAuthorization{}); err == nil || out.CommandID != "" || !expiry.IsZero() {
+				t.Fatal("empty owner/context disclosed options or a delivery ceiling")
+			}
 			out, err := s.Register(ctx, passkey.SessionEnrollmentCompletion{})
 			fields, e := out.Bindings()
 			if err == nil || e != nil || fields.CommandID != "" || fields.Credential != nil {

@@ -2,6 +2,11 @@
 
 ## Unreleased
 
+- Add `RegistrationOptionsForDelivery`, preserving the existing B API while
+  exposing its genuine original UV authorization expiry alongside fresh options.
+  B's later protocol TTL cannot substitute for that final delivery ceiling.
+  Replays/errors return zero expiry and no options; no lease or proof is renewed.
+
 - Expose original session-enrollment ceremony rate metadata through
   `SessionRegistrationRateSource`. Authenticate current session/CSRF and exact
   native intent against genuine assertion/registration records, without command
