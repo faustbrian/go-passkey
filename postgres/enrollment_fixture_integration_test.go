@@ -60,6 +60,7 @@ type enrollmentFixture struct {
 	bearer      auth.BearerCredential
 	counters    risk.CounterCoordinator
 	proofConfig passwordpg.ReauthenticationConfig
+	riskConfig  riskpg.Config
 }
 
 // Existing active password/session state is deliberate fixture input. Every
@@ -316,7 +317,8 @@ INSERT INTO identity_mfa.factor_authorities VALUES('01ARZ3NDEKTSV4RRFFQ69G5FAV',
 	if err != nil {
 		t.Fatal(err)
 	}
-	protected, err := riskpg.NewRepository(riskpg.Config{Schema: "passkey_risk", PolicyVersion: 1, EvidenceKeys: []risk.EvidenceKey{evidence}, EnvelopeKeys: map[string][]byte{"fixture": bytes.Repeat([]byte{37}, 32)}, CurrentEnvelopeKey: "fixture", CommandCounters: &risk.CommandCounterPolicyConfig{Policy: riskPolicy, Keys: []risk.CounterDigestKey{key}}, EnforceLockouts: true})
+	riskConfig := riskpg.Config{Schema: "passkey_risk", PolicyVersion: 1, EvidenceKeys: []risk.EvidenceKey{evidence}, EnvelopeKeys: map[string][]byte{"fixture": bytes.Repeat([]byte{37}, 32)}, CurrentEnvelopeKey: "fixture", CommandCounters: &risk.CommandCounterPolicyConfig{Policy: riskPolicy, Keys: []risk.CounterDigestKey{key}}, EnforceLockouts: true}
+	protected, err := riskpg.NewRepository(riskConfig)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -328,7 +330,7 @@ INSERT INTO identity_mfa.factor_authorities VALUES('01ARZ3NDEKTSV4RRFFQ69G5FAV',
 	if err != nil {
 		t.Fatal(err)
 	}
-	return &enrollmentFixture{ctx: ctx, pool: pool, service: service, proofs: proofs, bearer: auth.NewBearerCredential(wire), counters: counters, proofConfig: proofConfig}
+	return &enrollmentFixture{ctx: ctx, pool: pool, service: service, proofs: proofs, bearer: auth.NewBearerCredential(wire), counters: counters, proofConfig: proofConfig, riskConfig: riskConfig}
 }
 
 func (f *enrollmentFixture) request(t *testing.T, finish bool) RegistrationRequest {

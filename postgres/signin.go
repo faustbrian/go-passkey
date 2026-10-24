@@ -94,7 +94,18 @@ func (SigninConfig) MarshalText() ([]byte, error) { return nil, session.ErrSecre
 // NewSigninService validates native composition without IO or entropy. The
 // exact profile is retained across preauth issue, options and final session.
 func NewSigninService(pool *database.Pool, c SigninConfig) (*SigninService, error) {
-	if pool == nil || pool.Raw() == nil || c.Authorization == nil || c.Clock == nil || c.Protocol.MaximumDuration < time.Millisecond || c.Protocol.MaximumDuration > 5*time.Second || len(c.IdentifierKey) != 32 || c.Flow.Action != signinOperation(true).OperationID || c.Flow.PolicyVersion == 0 || c.Flow.Purpose != session.PreAuthSessionIssuance || c.Session.Authority != nil || c.Profile.RPNamespace == "" || c.Coordinator.QueryPolicy == nil || c.Coordinator.AdmissionPolicy == nil || c.Coordinator.AdmissionPolicy.PolicyVersion != c.Flow.PolicyVersion {
+	return newSigninRuntime(pool, c, false)
+}
+
+// Shared infrastructure only: the signup owner has its own invocation,
+// protocol admission, domain creation and session effect. No signin operation
+// is exposed by SignupService and no assertion is relabelled as registration.
+func newSigninRuntime(pool *database.Pool, c SigninConfig, signup bool) (*SigninService, error) {
+	action := signinOperation(true).OperationID
+	if signup {
+		action = signupOperation(true).OperationID
+	}
+	if pool == nil || pool.Raw() == nil || c.Authorization == nil || c.Clock == nil || c.Protocol.MaximumDuration < time.Millisecond || c.Protocol.MaximumDuration > 5*time.Second || !signup && len(c.IdentifierKey) != 32 || c.Flow.Action != action || c.Flow.PolicyVersion == 0 || c.Flow.Purpose != session.PreAuthSessionIssuance || c.Session.Authority != nil || c.Profile.RPNamespace == "" || c.Coordinator.QueryPolicy == nil || c.Coordinator.AdmissionPolicy == nil || c.Coordinator.AdmissionPolicy.PolicyVersion != c.Flow.PolicyVersion {
 		return nil, identity.InvalidInputError{Field: "passkey_signin"}
 	}
 	if _, err := PasskeyAuthorityKey(c.Profile.RPNamespace, c.Protocol.TenantID, "validation"); err != nil {
@@ -136,21 +147,33 @@ func NewSigninService(pool *database.Pool, c SigninConfig) (*SigninService, erro
 	if err != nil {
 		return nil, err
 	}
-	custody, err := risk.NewAuthenticationAdmissionCustody(c.Risk)
-	if err != nil {
-		return nil, err
+	var custody risk.AuthenticationAdmissionCustody
+	if !signup {
+		custody, err = risk.NewAuthenticationAdmissionCustody(c.Risk)
+		if err != nil {
+			return nil, err
+		}
 	}
 	authority, err := NewSessionAuthority(pool, SessionAuthorityConfig{TenantID: c.Protocol.TenantID, RPNamespace: c.Profile.RPNamespace, RPID: c.Protocol.RelyingParty.ID, MaximumDuration: c.Protocol.MaximumDuration})
 	if err != nil {
 		return nil, err
 	}
-	effect, err := sessionpg.NewPasskeySigninEffect(c.Repository, c.Profile, authority)
-	if err != nil {
-		return nil, err
+	var effect *sessionpg.PasskeySigninEffect
+	if !signup {
+		effect, err = sessionpg.NewPasskeySigninEffect(c.Repository, c.Profile, authority)
+		if err != nil {
+			return nil, err
+		}
 	}
 	s := &SigninService{pool: pool, config: func() SigninConfig { return c }, flow: flow, directory: directory, protocol: protocol, policy: policies, risk: custody, effect: effect}
-	if _, err := session.NewPasskeySessionIssuerWithCSRF(&signinInvocation{}, c.Session, c.CSRF); err != nil {
-		return nil, err
+	var issuerErr error
+	if signup {
+		_, issuerErr = session.NewPasskeySignupSessionIssuerWithCSRF(&signupInvocation{}, c.Session, c.CSRF)
+	} else {
+		_, issuerErr = session.NewPasskeySessionIssuerWithCSRF(&signinInvocation{}, c.Session, c.CSRF)
+	}
+	if issuerErr != nil {
+		return nil, issuerErr
 	}
 	if c.OptionsRequests.state != nil {
 		p := &signinInvocation{Store: protocol, service: s, operation: signinOperation(false)}

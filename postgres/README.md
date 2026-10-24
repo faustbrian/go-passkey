@@ -3,6 +3,73 @@
 Experimental, incomplete and unreleased. The selected existing-account flow
 does not substitute for a complete passkey authentication platform.
 
+## Explicit passkey-first signup
+
+`NewSignupService` selects a fixed tenant/RP's resident-required, UV-required,
+none-attestation, ES256 registration without an email or password. It exposes
+no HTTP routes. Supply the real protocol, kernel coordinator, authorization,
+session, protected risk and counter configuration; use the public dependency
+baselines pinned in this module. `Flow.Action` is
+`identity.passkey.register-verify`. The registration counter policy remains
+CredentialMutation: five attempts per fifteen minutes with transaction-owned
+denial, projected onto the actual tenant/browser flow/network/device.
+
+1. `PrepareFlow` -> `IssueFlow` uses the session owner's original cookie,
+   origin, expiry and remember choice. Neither step authenticates a user.
+2. `RegistrationOptions` commits genuine protocol options and prospective
+   intent only. It creates no account, stable handle, credential or auth session.
+3. `Signup` verifies the original authenticator and atomically creates the user,
+   initial passkey reference, protocol credential, RP-wide mapping, known-empty
+   MFA generation, authorization authority and session/family/issuance. Required
+   credential, `user.created.v1` and `session.created.v1` events share that Work.
+4. Only the new acknowledged winner receives bearer/CSRF custody. The common
+   passkey session reader and cookie logout work for that new account, and its
+   passkey can sign in again through the selected identifier-free signin API.
+   Consumer authorization must admit that actual new account, not only seed users.
+
+Install the common kernel/credential/directory histories and selected kernel
+registration/acceptance/passkey-registration suffixes, protocol registration
+history (including protocol migration4), MFA's passkey-signup suffix, session
+issuance/pre-auth/CSRF and selected passkey-signup purpose suffix, and the risk
+owner's passkey-signup counter suffix. Each owner retains its own migration
+history. Append `SignupMigrationSource` at the next unused native slot after
+mapping history; mapping1/signin2/metadata3 installations select4. Unselected
+signin/metadata histories are not signup bootstrap dependencies. Do not rewrite
+old SQL or run optional purpose suffixes out of their selected order. Real
+three-event-capable audit/outbox owners are required, not application stubs.
+
+`OptionsRequests` is separately opt-in. Configure `NewOptionsRequestConfig` and
+the existing kernel request-key history, then call `KeyedRegistrationOptions`
+with root `passkey.KeyedSignupOptionsRequest`. Leave `CommandID` empty and retain
+the exact key/browser/input. Its trusted service caller addresses the original
+`identity.anonymous-flow`. The existing request-key owner allocates one command;
+matching retries return only its metadata, including after flow expiry or
+consumption. Another key cannot bypass original expiry. No second request journal
+or challenge reconstruction is introduced.
+
+Retain original commands and browser custody across ambiguous outcomes.
+`RecoverRegistrationOptions(request, caller)` and
+`RecoverSignup(request, ceremonyID, caller)` require the original cookie/origin
+and current coordinator query policy. The native owner reads the original
+credential reference; consumers need no private SQL. Recovery does not require
+live flow or current account epochs, renew freshness, repeat registration or
+redeliver authentication. Retain original flow records and their lookup key
+while supporting this metadata recovery. Account/session administration remains
+separate from historical outcome disclosure.
+
+For a disposable PostgreSQL test cluster with the documented test-role
+privileges, the executable native journey and failure/recovery checks are:
+
+```sh
+go test -tags=integration -race -count=1 \
+  -run '^(TestPasskeySignup|TestKeyedPasskeySignup)' .
+```
+
+Set `IDENTITY_POSTGRES_TEST_DSN` to that isolated cluster, never an existing
+application database. Tests create/drop their own databases and audit roles.
+Reference/HTTP composition, conditional signin and passkey-session management
+are distinct profiles; this native API alone does not claim them or full M16.
+
 `NewDeletionService` selects native self-user removal under the existing
 single-factor password-session profile. `DeletionConfig.ManagementConfig`
 supplies the fixed tenant/RP, password reader, original-key, policy and risk

@@ -2,6 +2,19 @@
 
 ## Unreleased
 
+- Add explicitly selected native passkey-only signup, original pre-auth cookie
+  and remember custody, genuine resident/UV registration and atomic account,
+  credential, RP mapping, known-empty MFA, authorization and session creation.
+  Persist all three required lifecycle events; failures roll back together and
+  only a newly acknowledged winner receives bearer/CSRF. Append selected owner
+  migrations and native `SignupMigrationSource` before use; old histories remain
+  unchanged. No email, password or recovery factor is invented.
+- Add opt-in keyed signup options through the existing request-key owner and
+  original-browser metadata recovery for options/completion. Matching retries,
+  consumed/expired flows and ambiguous commits do not reconstruct challenges,
+  repeat effects or redeliver authentication. Reference/HTTP and conditional
+  signin remain separate composition work.
+
 - Add native keyed self-user deletion through genuine signed delete proof and
   the configured password-reset recovery owner. Proof consumption, current
   factors/recovery, protocol key erasure, disabled reference, separate metadata
