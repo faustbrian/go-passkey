@@ -27,10 +27,11 @@ type SignupRequest struct {
 // response to the completion phase's original command. Response is borrowed for
 // the call, not owned or validated here; the native owner must bound and copy it
 // before parsing or retaining it. Label is untrusted display metadata. The native
-// owner must verify the actual resident-required, UV-required, none-attestation,
-// ES256 protocol result before creating an account, credential, MFA authority,
-// authentication or session in the same durable work. Retries retain exact
-// original input and must not issue new authentication from historical results.
+// owner must verify the actual resident-required, UV-required, none-attestation
+// protocol result against the exact selected algorithm profile before creating
+// an account, credential, MFA authority, authentication or session in the same
+// durable work. Retries retain exact original input and must not issue new
+// authentication from historical results.
 type SignupCompletion struct {
 	SignupRequest
 	CeremonyID string

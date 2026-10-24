@@ -240,7 +240,7 @@ func (p *sessionDeleteInvocation) remainingCredential(ctx context.Context, w ker
 	if err != nil {
 		return err
 	}
-	if credential.Algorithm != int32(webauthn.ES256) {
+	if !selectedPasskeyAlgorithm(p.service.owner.config().Protocol.Algorithms, credential.Algorithm) {
 		return identity.ForbiddenError{}
 	}
 	return nil

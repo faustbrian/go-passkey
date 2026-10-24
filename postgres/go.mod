@@ -31,7 +31,7 @@ require (
 	github.com/faustbrian/go-transactional-outbox/postgres/identity v0.0.0-20261024010627-e45fa7048f38
 	github.com/faustbrian/go-transactional-outbox/v2 v2.1.1-0.20261022172917-6ed5e0861542
 	github.com/faustbrian/go-webauthn v0.0.0-20261020074004-ed89b240ab20
-	github.com/faustbrian/go-webauthn/postgres v0.0.0-20261024100942-ac9b461de6d8
+	github.com/faustbrian/go-webauthn/postgres v0.0.0-20261024120438-4801d794c5dc
 	github.com/jackc/pgx/v5 v5.11.0
 )
 

@@ -29,9 +29,10 @@ persistence.
   an empty incoming command ID and reuse `KeyedRegistrationOptionsResult`;
   only its fresh committed winner may reveal options. Completion borrows raw
   response bytes: the native owner must bound and copy them before parsing or
-  retaining them. Actual resident-required, UV-required, none-attestation,
-  ES256 verification must precede coherent account/credential/MFA/session
-  creation. No authentication or CSRF secret may be returned before acknowledged
+  retaining them. Actual resident-required, UV-required, none-attestation
+  verification under the exact selected algorithm profile must precede coherent
+  account/credential/MFA/session creation. No authentication or CSRF secret may
+  be returned before acknowledged
   commit or from an aborted, unknown or historical result. Implicit JSON/text
   export is denied and ordinary formatting is redacted; explicit fields are
   still sensitive and are not an audit or wire projection.

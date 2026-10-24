@@ -17,7 +17,8 @@ import (
 
 // SessionDeletionConfig selects actual passkey-session, CSRF, protocol, policy
 // and risk owners. This explicit profile permits removal only when another
-// live resident ES256 passkey remains usable. Password/email/OTP recovery is
+// live resident passkey in the selected algorithm profile remains usable.
+// Password/email/OTP recovery is
 // not inferred or substituted. Installing it enables no HTTP route. Install
 // the selected owner histories before use; the primary pool is borrowed.
 type SessionDeletionConfig = SessionManagementConfig
@@ -30,10 +31,10 @@ type SessionDeletionConfig = SessionManagementConfig
 type SessionDeletionService struct{ owner *SessionManagementService }
 
 // NewSessionDeletionService validates and freezes concrete owners without IO.
-// This closed resident-ES256 recovery profile does not enable the independent
+// This selected resident-key recovery profile does not enable the independent
 // password-proof deletion service. The pool must outlive all calls.
 func NewSessionDeletionService(pool *database.Pool, c SessionDeletionConfig) (*SessionDeletionService, error) {
-	if c.Protocol.Algorithms != nil && (len(c.Protocol.Algorithms) != 1 || c.Protocol.Algorithms[0] != webauthn.ES256) {
+	if !validPasskeyAlgorithms(c.Protocol.Algorithms) {
 		return nil, identity.InvalidInputError{Field: "passkey_deletion_algorithms"}
 	}
 	owner, err := NewSessionManagementService(pool, c)

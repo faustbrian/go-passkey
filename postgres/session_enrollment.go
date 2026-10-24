@@ -36,7 +36,7 @@ type SessionEnrollmentService struct{ owner *SessionManagementService }
 // must outlive calls. Configuration cannot supply substitute domain stores or
 // completed proofs; A and B use distinct keys and C retains its own command ID.
 func NewSessionEnrollmentService(pool *database.Pool, c SessionEnrollmentConfig) (*SessionEnrollmentService, error) {
-	if c.Protocol.Algorithms != nil && (len(c.Protocol.Algorithms) != 1 || c.Protocol.Algorithms[0] != webauthn.ES256) {
+	if !validPasskeyAlgorithms(c.Protocol.Algorithms) {
 		return nil, identity.InvalidInputError{Field: "passkey_enrollment_algorithms"}
 	}
 	owner, err := NewSessionManagementService(pool, c)

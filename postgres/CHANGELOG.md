@@ -2,6 +2,14 @@
 
 ## Unreleased
 
+- Support explicitly selected Ed25519 and ordered mixed ES256/Ed25519 profiles
+  through enrollment, passkey-only signup, signin and current-session key
+  enrollment, rename and removal. Nil keeps ES256; empty, duplicate, unknown and
+  RS256 selections deny. Original profile order remains bound to continuations.
+  Last-key recovery counts only keys admitted by the current signin profile and
+  finds a later selected key after earlier unselected mappings. Existing
+  migrations, protocol verification and session/recovery custody are unchanged.
+
 - Add explicit current-passkey-session UV removal with an independently usable
   resident ES256 key, atomic protocol/reference/mapping removal and affected
   passkey-session invalidation. Last-key removal and stale/substituted authority

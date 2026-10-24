@@ -26,7 +26,8 @@ import (
 )
 
 // EnrollmentConfig selects existing-account, known-empty-MFA, resident-required
-// UV/none/ES256 enrollment. Each phase has its exact signed fresh-action source;
+// UV/none enrollment with selected ES256/Ed25519 algorithms. Each phase has
+// its exact signed fresh-action source;
 // no boolean freshness or application domain store can replace it. Dependencies
 // are borrowed and must outlive calls. The native risk owner charges protected
 // attempts through this command, not a separate workflow. Apply the actual
@@ -84,7 +85,7 @@ func NewEnrollmentService(pool *database.Pool, c EnrollmentConfig) (*EnrollmentS
 	if _, err := identity.ParseIdentifierID(c.PolicyID); err != nil {
 		return nil, err
 	}
-	if c.Protocol.Algorithms != nil && (len(c.Protocol.Algorithms) != 1 || c.Protocol.Algorithms[0] != webauthn.ES256) {
+	if !validPasskeyAlgorithms(c.Protocol.Algorithms) {
 		return nil, identity.InvalidInputError{Field: "passkey_algorithms"}
 	}
 	c.Protocol.RelyingParty.Origins = slices.Clone(c.Protocol.RelyingParty.Origins)

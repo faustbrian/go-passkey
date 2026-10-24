@@ -25,14 +25,20 @@ import (
 	sessionpg "github.com/faustbrian/go-identity/session/postgres"
 	migrations "github.com/faustbrian/go-migrations/v3"
 	passkey "github.com/faustbrian/go-passkey"
+	webauthn "github.com/faustbrian/go-webauthn"
 )
 
 // The existing account belongs to an unrelated fixture tenant member. No row
 // for the prospective signup user may exist until genuine registration succeeds.
 func newSignupFixture(t *testing.T, keyed ...bool) (*signinFixture, *SignupService) {
+	return newSignupFixtureAlgorithms(t, nil, keyed...)
+}
+
+func newSignupFixtureAlgorithms(t *testing.T, algorithms []webauthn.Algorithm, keyed ...bool) (*signinFixture, *SignupService) {
 	t.Helper()
 	f := newSigninFixtureForEnrolledAccountProfile(t, newEnrollmentFixture(t), true)
 	c := f.signin.config()
+	c.Protocol.Algorithms = algorithms
 	c.Flow.Action = "identity.passkey.register-verify"
 	apply := func(source migrations.Source, min migrations.Version) {
 		t.Helper()

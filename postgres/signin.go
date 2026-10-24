@@ -29,7 +29,7 @@ import (
 	webauthnpg "github.com/faustbrian/go-webauthn/postgres"
 )
 
-// SigninConfig selects one trusted identified resident UV/ES256 passkey
+// SigninConfig selects one trusted identified resident UV passkey
 // deployment. Flow.Action must be identity.passkey.signin-verify. Profile and
 // protocol fix tenant/RP/policy before browser input; final Remember comes only
 // from the original session-owned flow. Dependencies are borrowed and must
@@ -111,7 +111,7 @@ func newSigninRuntime(pool *database.Pool, c SigninConfig, signup bool) (*Signin
 	if _, err := PasskeyAuthorityKey(c.Profile.RPNamespace, c.Protocol.TenantID, "validation"); err != nil {
 		return nil, err
 	}
-	if c.Protocol.Algorithms != nil && (len(c.Protocol.Algorithms) != 1 || c.Protocol.Algorithms[0] != webauthn.ES256) {
+	if !validPasskeyAlgorithms(c.Protocol.Algorithms) {
 		return nil, identity.InvalidInputError{Field: "passkey_algorithms"}
 	}
 	if !slices.Contains(c.Protocol.RelyingParty.Origins, c.Flow.Origin) {

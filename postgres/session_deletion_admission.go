@@ -72,20 +72,8 @@ func (p *sessionDeleteInvocation) prepare(ctx context.Context) (err error) {
 	if err != nil || p.authProtocol.TenantID != p.record.TenantID || p.authProtocol.UserID != p.record.UserID || p.authProtocol.RPID != c.Protocol.RelyingParty.ID || p.authProtocol.Version == 0 || p.authProtocol.Version == ^uint64(0) || len(p.authProtocol.UserHandle) != 32 || !bytes.Equal(p.authProtocol.UserHandle, p.targetProtocol.UserHandle) {
 		return identity.ForbiddenError{}
 	}
-	// Native enrollment already requires resident keys. Select a deterministic
-	// distinct active mapping, then require all real kernel/protocol owners in
-	// Work. Missing/corrupt provenance fails closed rather than counting a row as
-	// recovery. Kernel/protocol admission repeats under the protected Work.
-	var remaining string
-	if err := p.service.owner.pool.Raw().QueryRow(ctx, `SELECT reference_id,credential_id,version::text FROM identity_passkey.credentials WHERE rp_namespace=$1 AND tenant_id=$2 AND user_id=$3 AND reference_id<>$4 AND state='active' ORDER BY reference_id COLLATE "C" LIMIT 1`, c.Profile.RPNamespace, string(p.record.TenantID), string(p.record.UserID), string(p.reference.ID)).Scan(&remaining, &p.remainingID, &version); err != nil {
-		return identity.ForbiddenError{}
-	}
-	p.remaining, err = p.credential(ctx, identity.CredentialID(remaining))
-	if err != nil {
+	if err := p.selectRemaining(ctx, lookup); err != nil {
 		return err
-	}
-	if version != strconv.FormatUint(p.remaining.Version, 10) {
-		return identity.ForbiddenError{}
 	}
 	p.sourceFields, err = sessionpg.OriginalSessionFields(p.read.Session)
 	if err != nil {
@@ -121,6 +109,60 @@ func (p *sessionDeleteInvocation) prepare(ctx context.Context) (err error) {
 		}
 	}
 	return p.read.ValidateAt(c.Clock.Now().UTC())
+}
+
+func (p *sessionDeleteInvocation) selectRemaining(ctx context.Context, lookup webauthn.Lookup) error {
+	c := p.service.owner.config()
+	// Match native enrollment's 100-key inventory bound. Algorithm selection
+	// reads protocol-owned metadata rather than copying keys into native storage;
+	// an earlier unselected mapping must not hide a later selected recovery key.
+	rows, err := p.service.owner.pool.Raw().Query(ctx, `SELECT reference_id,credential_id,version::text FROM identity_passkey.credentials WHERE rp_namespace=$1 AND tenant_id=$2 AND user_id=$3 AND reference_id<>$4 AND state='active' ORDER BY reference_id COLLATE "C" LIMIT 101`, c.Profile.RPNamespace, string(p.record.TenantID), string(p.record.UserID), string(p.reference.ID))
+	if err != nil {
+		return err
+	}
+	type candidate struct {
+		reference, version string
+		id                 []byte
+	}
+	var candidates []candidate
+	for rows.Next() {
+		var candidate candidate
+		if err := rows.Scan(&candidate.reference, &candidate.id, &candidate.version); err != nil || len(candidate.id) == 0 || len(candidate.id) > 1024 || len(candidates) >= 100 {
+			rows.Close()
+			return identity.ForbiddenError{}
+		}
+		candidates = append(candidates, candidate)
+	}
+	err = rows.Err()
+	rows.Close()
+	if err != nil {
+		return err
+	}
+	for _, candidate := range candidates {
+		credential, err := p.service.owner.protocol.LoadCredential(ctx, lookup, candidate.id)
+		if err != nil {
+			return err
+		}
+		if !selectedPasskeyAlgorithm(c.Protocol.Algorithms, credential.Algorithm) {
+			continue
+		}
+		if credential.TenantID != p.record.TenantID || credential.UserID != p.record.UserID || credential.RPID != c.Protocol.RelyingParty.ID || !bytes.Equal(credential.ID, candidate.id) || !bytes.Equal(credential.UserHandle, p.authProtocol.UserHandle) {
+			return identity.ForbiddenError{}
+		}
+		p.remaining, err = p.credential(ctx, identity.CredentialID(candidate.reference))
+		if err != nil {
+			return err
+		}
+		if candidate.version != strconv.FormatUint(p.remaining.Version, 10) {
+			return identity.ForbiddenError{}
+		}
+		p.remainingID = bytes.Clone(candidate.id)
+		// This is selection, never recovery authority. The original kernel,
+		// resident-provenance and current selected-algorithm fences run again
+		// during Apply and final precommit in the sole protected Work.
+		return nil
+	}
+	return identity.ForbiddenError{}
 }
 
 func (p *sessionDeleteInvocation) current(ctx context.Context, w kernel.Work, kernelRemoved, mappingRemoved bool) error {

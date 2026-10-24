@@ -3,12 +3,30 @@
 Experimental, incomplete and unreleased. The selected existing-account flow
 does not substitute for a complete passkey authentication platform.
 
+## Selected algorithms
+
+`Protocol.Algorithms` selects ES256 (`-7`), EdDSA (`-8`, Ed25519 only), or an
+ordered unique combination of both. Nil preserves the released ES256 default;
+explicit empty, duplicate, unknown and RS256 profiles deny construction. The
+exact order and nil representation remain bound to original requests and
+ceremonies. Do not change the selected profile while continuing a ceremony.
+
+The same selection applies to password-proof enrollment, prospective passkey-
+only signup, identified/discoverable signin and current-session enrollment,
+rename and removal. Cryptographic verification, COSE/UV/backup/counters remain
+owned by WebAuthn. Removal can count only another usable resident key in the
+**current selected signin profile**. A stored key with an unselected algorithm
+does not make removing the last selected key safe; an earlier unselected
+mapping does not hide a later selected recovery key. Existing protocol and
+mapping histories are unchanged. Native signed-authenticator integration does
+not establish browser/platform interoperability for Ed25519.
+
 ## Current-session removal with another resident key
 
 Explicitly construct `NewSessionDeletionService(pool, SessionDeletionConfig)`
 with the actual current passkey-session, CSRF, policy, risk and protocol owners
-used by session management. This closed ES256 profile requires another usable
-resident key; it never invents password, email or OTP recovery. The existing
+used by session management. This selected algorithm profile requires another
+usable resident key; it never invents password, email or OTP recovery. The existing
 password-proof `DeletionService` remains separate and unchanged.
 
 Install the selected kernel/MFA/passkey histories and WebAuthn migration 6
@@ -58,8 +76,9 @@ protected risk owners. Configuration uses the same explicit fields as
 `SessionManagementConfig`; constructing either service enables no HTTP route.
 The native owner supplies domain repositories and orchestration, not application
 callbacks pretending that verification succeeded. This profile selects resident
-UV/none/ES256, known-empty MFA and one self-human session. Enrolled-MFA and
-organization variants remain separate, unsupported profiles.
+UV/none with selected ES256/Ed25519 algorithms, known-empty MFA and one self-human
+session. Enrolled-MFA and organization variants remain separate, unsupported
+profiles.
 
 Install the existing mapping/signin-context/metadata, session/MFA, kernel request-
 key, risk, audit and outbox histories, plus **WebAuthn migration 5** before use.
@@ -208,7 +227,8 @@ separate qualification boundaries.
 ## Explicit passkey-first signup
 
 `NewSignupService` selects a fixed tenant/RP's resident-required, UV-required,
-none-attestation, ES256 registration without an email or password. It exposes
+none-attestation registration in the selected ES256/Ed25519 profile without an
+email or password. It exposes
 no HTTP routes. Supply the real protocol, kernel coordinator, authorization,
 session, protected risk and counter configuration; use the public dependency
 baselines pinned in this module. `Flow.Action` is
@@ -341,7 +361,8 @@ locks before mapping locks. Every error must abort that Work; this adapter does
 not claim to poison a transaction when its caller ignores a returned error.
 
 `NewEnrollmentService` selects existing-account enrollment with known-empty MFA,
-resident-required UV/none/ES256 policy and separate genuine signed fresh action
+resident-required UV/none with the selected ES256/Ed25519 policy and separate
+genuine signed fresh action
 proofs for options and completion. Configure the actual native password action
 sources and protected risk owner; no boolean freshness, private store or fake
 verifier is accepted. The browser receives options only after commit. Completion
@@ -478,7 +499,8 @@ Changed or contradictory recovery evidence stays unknown, never reconstructed
 as success from current label state. This API does not delete a credential or
 alter recovery eligibility and does not expose HTTP routes.
 
-`NewSigninService` composes UV/ES256 login. First use `PrepareFlow` and
+`NewSigninService` composes UV login in the selected ES256/Ed25519 profile. First
+use `PrepareFlow` and
 `IssueFlow` to retain the real session-owned browser cookie and remember choice;
 then pass that original flow to `AuthenticationOptions` and `Signin`. Trusted
 configuration fixes tenant, RP, origin, policy and ingress service actor.

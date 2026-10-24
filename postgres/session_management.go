@@ -90,6 +90,9 @@ func NewSessionManagementService(pool *database.Pool, c SessionManagementConfig)
 	if _, err := identity.ParseIdentifierID(c.PolicyID); err != nil {
 		return nil, invalid
 	}
+	if !validPasskeyAlgorithms(c.Protocol.Algorithms) {
+		return nil, identity.InvalidInputError{Field: "passkey_algorithms"}
+	}
 	for i, key := range c.CSRFKeys {
 		if key.Version() == 0 || i > 0 && c.CSRFKeys[i-1].Version() <= key.Version() {
 			return nil, invalid

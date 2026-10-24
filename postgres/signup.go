@@ -158,7 +158,8 @@ func (s *SignupService) prepare(ctx context.Context, r passkey.SignupRequest, fi
 }
 
 // RegistrationOptions commits original session/browser/risk admission and a
-// genuine resident-required UV/none/ES256 ceremony. The opaque prospective user
+// genuine resident-required UV/none ceremony in the selected ES256/Ed25519
+// profile. The opaque prospective user
 // and handle remain bounded intent only; no durable account or mapping exists.
 func (s *SignupService) RegistrationOptions(ctx context.Context, r passkey.SignupRequest) (webauthn.RegistrationOptions, error) {
 	if s == nil || s.core == nil || ctx == nil {

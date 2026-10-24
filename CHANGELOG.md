@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+- Clarify that signup custody requires the native owner's exact selected
+  protocol-algorithm verification, rather than hardcoding ES256 in the data
+  carrier contract. The opaque carriers still grant no verification or authority.
+
 - Add opaque current-passkey-session removal request/completion custody and
   durability projection. Options and completion retain distinct original keys
   under the deletion action; native owners must supply genuine UV, atomic
