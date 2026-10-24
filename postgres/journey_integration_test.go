@@ -4,6 +4,7 @@ package postgres
 
 import (
 	"errors"
+	"slices"
 	"testing"
 	"time"
 
@@ -30,12 +31,8 @@ func TestPasskeyEnrollmentSigninInventoryReadAndCookieLogout(t *testing.T) {
 
 func passkeyJourneyReadInventoryLogout(t *testing.T, f *signinFixture, issued SigninResult, expectedLabels ...string) {
 	t.Helper()
-	expectedLabel := "Signin key"
-	if len(expectedLabels) > 1 {
-		t.Fatal("invalid journey label fixture")
-	}
-	if len(expectedLabels) == 1 {
-		expectedLabel = expectedLabels[0]
+	if len(expectedLabels) == 0 {
+		expectedLabels = []string{"Signin key"}
 	}
 	reader, profile, authority, input := passkeyJourneyReader(t, f, issued)
 	accepted, err := reader.Get(f.ctx, input)
@@ -55,8 +52,20 @@ func passkeyJourneyReadInventoryLogout(t *testing.T, f *signinFixture, issued Si
 	caller := authorization.DecisionContext{PolicyRevision: 1, CorrelationID: "passkey-journey", Request: authorization.Request{Subject: authorization.Subject{Kind: authorization.SubjectUser, ID: authorization.SubjectID(spec.UserID)}, Tenant: authorization.TenantID(spec.TenantID), Action: "identity.passkey.list", Resource: authorization.Resource{Type: "identity.user", ID: authorization.ResourceID(spec.UserID)}}}
 	listing := InventoryRequest{Credential: input.Credential, Caller: caller, AttemptID: attempt, Limit: 10}
 	page, err := inventory.List(f.ctx, listing)
-	if err != nil || len(page.Credentials) != 1 || page.Credentials[0].LastUsedAt == nil || page.Credentials[0].Label != expectedLabel {
+	if err != nil || len(page.Credentials) != len(expectedLabels) {
 		t.Fatal("passkey-authenticated safe inventory", err)
+	}
+	labels := make([]string, 0, len(page.Credentials))
+	used := false
+	for _, credential := range page.Credentials {
+		labels = append(labels, credential.Label)
+		used = used || credential.LastUsedAt != nil
+	}
+	want := slices.Clone(expectedLabels)
+	slices.Sort(labels)
+	slices.Sort(want)
+	if !used || !slices.Equal(labels, want) {
+		t.Fatal("passkey inventory labels or actual usage changed")
 	}
 
 	history, err := (sessionpg.RevokeOneMigrationSource{Base: sessionpg.RevocationMigrationSource{Base: sessionpg.MigrationSource{Schema: "session_store", Version: 1}, Version: 2}, Version: 8}).Load(f.ctx)

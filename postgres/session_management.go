@@ -138,11 +138,17 @@ func sessionUpdateOperation(finish bool) identity.FeatureOperation {
 }
 
 func (s *SessionManagementService) authenticate(ctx context.Context, r passkey.SessionUpdateRequest) (session.GetResult, session.SessionSpec, error) {
+	return s.authenticateAction(ctx, r, "identity.passkey.update")
+}
+
+// Both management workflows use the same actual transport, CSRF and current
+// session owner. The caller action remains exact, never a generic passkey grant.
+func (s *SessionManagementService) authenticateAction(ctx context.Context, r passkey.SessionUpdateRequest, action string) (session.GetResult, session.SessionSpec, error) {
 	c := s.config()
 	deny := func() (session.GetResult, session.SessionSpec, error) {
 		return session.GetResult{}, session.SessionSpec{}, identity.ForbiddenError{}
 	}
-	if r.Credential.Kind() != c.Transport || r.Caller.Validate() != nil || uint64(r.Caller.PolicyRevision) != c.PolicyVersion || r.Caller.Request.Tenant != authorization.TenantID(c.Protocol.TenantID) || r.Caller.Request.Subject.Kind != authorization.SubjectUser || r.Caller.Request.Action != "identity.passkey.update" || r.Caller.Request.Resource.Type != "identity.user" {
+	if r.Credential.Kind() != c.Transport || r.Caller.Validate() != nil || uint64(r.Caller.PolicyRevision) != c.PolicyVersion || r.Caller.Request.Tenant != authorization.TenantID(c.Protocol.TenantID) || r.Caller.Request.Subject.Kind != authorization.SubjectUser || r.Caller.Request.Action != authorization.Action(action) || r.Caller.Request.Resource.Type != "identity.user" {
 		return deny()
 	}
 	got, err := s.sessions.Get(ctx, session.GetRequest{TenantID: c.Protocol.TenantID, Credential: r.Credential})

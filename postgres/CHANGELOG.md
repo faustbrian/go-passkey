@@ -2,6 +2,17 @@
 
 ## Unreleased
 
+- Add explicitly selected additional resident-passkey enrollment under a current
+  passkey session, without password proofs. Genuine action-bound UV consumes the
+  assertion and creates registration options in one transaction; finalization
+  atomically persists protocol/kernel/mapping and required lifecycle effects.
+  Preserve original session/CSRF, intended label/origin/network, current factor
+  and policy authority and the original assertion's absolute expiry. A/B retain
+  distinct retry keys; C retains its stable original command without a key.
+  Committed retries reveal metadata only, never another credential or session.
+  Install WebAuthn migration 5; native mapping histories are unchanged. HTTP and
+  reference selection remain separate work, and password-proof APIs are intact.
+
 - Add opt-in current-passkey-session label management without a password
   credential or reusable proof. Original keyed options bind the session, target,
   metadata version, label, RP, origin and network; a genuine UV assertion is

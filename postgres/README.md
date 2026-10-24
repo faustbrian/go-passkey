@@ -3,6 +3,63 @@
 Experimental, incomplete and unreleased. The selected existing-account flow
 does not substitute for a complete passkey authentication platform.
 
+## Additional resident key under a passkey session
+
+Select `NewSessionEnrollmentService(pool, SessionEnrollmentConfig{...})` with
+the actual session, protocol, mapping, authorization, clock, keyed-request and
+protected risk owners. Configuration uses the same explicit fields as
+`SessionManagementConfig`; constructing either service enables no HTTP route.
+The native owner supplies domain repositories and orchestration, not application
+callbacks pretending that verification succeeded. This profile selects resident
+UV/none/ES256, known-empty MFA and one self-human session. Enrolled-MFA and
+organization variants remain separate, unsupported profiles.
+
+Install the existing mapping/signin-context/metadata, session/MFA, kernel request-
+key, risk, audit and outbox histories, plus **WebAuthn migration 5** before use.
+Existing history bytes and password-proof APIs remain unchanged. The borrowed
+pool/collaborators outlive calls; each invocation is bounded to the configured
+protocol duration (1ms–5s), with earlier caller cancellation taking precedence.
+
+1. Construct `passkey.NewSessionEnrollmentRequest` from its explicit
+   `SessionEnrollmentRequestSpec`: actual cookie or bearer credential, original
+   CSRF for cookies, self-user caller for `identity.passkey.register-options`,
+   optional display label and trusted origin/network. Specs are unredacted
+   deliberate projections, not safe logs. Opaque request values reject implicit
+   serialization and hide custody even through nested formatting.
+2. Call `EnrollmentAssertionOptions` with `SessionEnrollmentOptionsRequest` and
+   the original A idempotency key. Transfer committed genuine assertion options
+   once, and have the session's existing authenticator perform UV.
+3. Call `RegistrationOptions` with
+   `passkey.NewSessionEnrollmentAuthorization(SessionEnrollmentAuthorizationSpec)`:
+   unchanged original request, a **distinct B key**, original A ceremony ID and
+   its genuine assertion bytes. The native coordinator consumes that assertion/
+   counter and creates registration together. Transfer the fresh resident-key
+   options once; no reusable reauthentication proof is created.
+4. Preserve intent and session, change the caller action to
+   `identity.passkey.register-verify`, and call `Register` with
+   `passkey.NewSessionEnrollmentCompletion(SessionEnrollmentCompletionSpec)`.
+   Supply one stable original `CommandID`, original B ceremony ID and genuine
+   registration response. **C has no IdempotencyKey.** Protocol consumption,
+   initial kernel reference, mapping/label, protected risk and required audit/
+   creation lifecycle share the existing transaction. Use the result's explicit
+   `Bindings` projection to inspect durability and safe fresh metadata.
+
+Each phase authenticates actual current session/CSRF and self-user policy before
+work, and fences the original directory/credential/factor/passkey/session and
+authorization generations again through final commit. Original A authorization
+expiry remains the ceiling for B and C; the later registration protocol TTL
+cannot extend it. No session, device cookie, password fallback or renewed proof
+is issued. The original session and both valid authenticators remain usable.
+
+After uncertainty preserve the exact A/B keys or C command, ceremony and input;
+never allocate a replacement to escape an unknown result. Reserved/committed
+history returns metadata only. If the reservation never committed, an unchanged
+retry may perform that command's first work; challenge generation occurs only
+after acknowledged reservation, never before. Once options or completion have
+committed, retries cannot reconstruct them. A current session is still required
+for disclosure, so logout/withdrawal denies old-session retries. This native
+profile is not HTTP/reference integration or browser interoperability proof.
+
 ## Current-passkey-session label management
 
 `NewSessionManagementService` explicitly enables label rename under a real
@@ -44,8 +101,8 @@ outcome without re-executing it. A different request needs a different key.
 
 This native profile does not expose HTTP endpoints, implement browser UI or
 certify authenticator/browser interoperability. Existing password-proof rename
-remains supported. Passkey-only deletion/recovery, additional enrollment and
-MFA/organization variants remain separate required profiles.
+remains supported. Additional enrollment is selected separately above;
+passkey-only deletion/recovery and MFA/organization variants remain required.
 
 ## Conditional assertion option generation
 
