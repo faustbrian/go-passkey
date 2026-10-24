@@ -2,6 +2,11 @@
 
 ## Unreleased
 
+- Add non-serializable current-session enrollment command carriers. Assertion
+  options and authorization retain distinct original keys; single-use
+  registration retains its original command and ceremony identity without a
+  second key. These values carry custody, not verified enrollment authority.
+
 - Add private-by-default current-session update request, keyed options and
   assertion-completion carriers for native action-bound UV label management.
   These data records grant no freshness or permission: the native owner must
