@@ -2,6 +2,11 @@
 
 ## Unreleased
 
+- Add an explicit private TOTP challenge arm to signin results, retaining the
+  original challenge identity, expiry and reveal-once child proof without a
+  session or CSRF credential. Native MFA composition remains opt-in; existing
+  known-empty-factor signin and signup transport behavior is unchanged.
+
 - Clarify that signup custody requires the native owner's exact selected
   protocol-algorithm verification, rather than hardcoding ES256 in the data
   carrier contract. The opaque carriers still grant no verification or authority.

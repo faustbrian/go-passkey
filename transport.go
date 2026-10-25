@@ -3,6 +3,7 @@ package passkey
 import (
 	"fmt"
 	"github.com/faustbrian/go-authorization/v3"
+	"github.com/faustbrian/go-capability/v2"
 	identity "github.com/faustbrian/go-identity"
 	"github.com/faustbrian/go-identity/password"
 	"github.com/faustbrian/go-identity/session"
@@ -64,15 +65,42 @@ type SigninCompletion struct {
 }
 
 // SigninResult contains a session only after genuine root verification and the
-// sole durable command commit. CSRF shares reveal-once custody with that issue.
+// sole durable command commit under the known-empty-factor profile. Explicit
+// MFA composition instead returns Challenge and Receipt, with Session and CSRF
+// empty until an independent enrolled factor completes. Replayed challenge
+// results never disclose a replacement proof or renew original freshness.
 type SigninResult struct {
-	Session session.IssueResult
-	CSRF    session.CSRFToken
+	Session   session.IssueResult
+	CSRF      session.CSRFToken
+	Receipt   identity.CommandResult
+	Replayed  bool
+	Challenge *SigninMFAChallenge
 	// CounterRisk is the root verifier's warning for a backup-eligible
 	// non-increasing counter. It is available only with committed signin;
 	// it neither declares compromise nor invalidates the synced passkey.
 	CounterRisk bool
 }
+
+// SigninMFAChallenge is the original committed TOTP-only child of a genuinely
+// verified UV passkey assertion, not a session, bearer or completed MFA proof.
+// Proof has reveal-once custody and is absent on historical/ambiguous outcomes.
+// ID and ExpiresAt identify the original child; retry never renews either.
+type SigninMFAChallenge struct {
+	ID        identity.CommandID
+	Method    string
+	ExpiresAt time.Time
+	Proof     capability.Proof
+}
+
+func (SigninMFAChallenge) Format(s fmt.State, _ rune) {
+	_, _ = s.Write([]byte("passkeypostgres.SigninMFAChallenge(redacted)"))
+}
+
+// MarshalJSON requires an explicit selected transport projection.
+func (SigninMFAChallenge) MarshalJSON() ([]byte, error) { return nil, session.ErrSecretSerialization }
+
+// MarshalText prohibits implicit export of challenge custody.
+func (SigninMFAChallenge) MarshalText() ([]byte, error) { return nil, session.ErrSecretSerialization }
 
 func (SigninRequest) Format(s fmt.State, _ rune) {
 	_, _ = s.Write([]byte("passkeypostgres.SigninRequest(redacted)"))

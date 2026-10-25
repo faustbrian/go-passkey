@@ -13,6 +13,14 @@ persistence.
 
 ## Current API
 
+`SigninResult.Challenge` is the explicit, private TOTP challenge alternative to
+`Session` and `CSRF`. It carries the original child identity and expiry; its
+proof is available only to the fresh committed native winner. Replays never
+renew that proof or reveal session credentials. These transport records grant
+no assertion, factor or session authority: selecting and executing the native
+MFA composition remains the PostgreSQL owner's responsibility. Existing
+known-empty-factor signin and signup APIs keep their behavior.
+
 - `ConditionalAssertionOptions` explicitly projects an existing anonymous
   discoverable assertion as `{mediation:"conditional",publicKey:...}`. It
   retains the protocol owner's original ceremony, UV requirements, expiry and
