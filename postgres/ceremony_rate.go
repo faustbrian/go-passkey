@@ -206,17 +206,45 @@ func (p *signinInvocation) readRateContext(ctx context.Context) error {
 	}
 	var wire []byte
 	err := p.service.pool.Raw().QueryRow(ctx, `SELECT admission FROM identity_passkey.signin_contexts WHERE rp_namespace=$1 AND ceremony_id=$2 AND tenant_id=$3`, p.service.config().Profile.RPNamespace, p.ceremonyID, string(p.service.config().Protocol.TenantID)).Scan(&wire)
-	var original identifiedSigninContext
-	if err != nil || len(wire) == 0 || len(wire) > 4096 || json.Unmarshal(wire, &original) != nil {
+	if err != nil {
 		return identity.ForbiddenError{}
 	}
-	canonical, err := json.Marshal(original)
-	// The existing native encoding is canonical. Exact bytes reject discovery's
-	// different domain, unknown/duplicate fields and malformed retained metadata.
-	if err != nil || !bytes.Equal(canonical, wire) || original.Flow != string(p.request.FlowID) || original.Namespace != p.service.config().Profile.RPNamespace || original.Global != p.directory.Query.GlobalAuthorityID || original.Policy != p.service.config().Profile.PolicyNamespace || original.Input != p.identifier || original.GlobalVersion != p.directory.GlobalVersion || original.TenantVersion != p.directory.TenantVersion {
+	original, err := p.service.decodeIdentifiedRateContext(wire)
+	if err != nil || original.Flow != string(p.request.FlowID) || original.Namespace != p.service.config().Profile.RPNamespace || original.Global != p.directory.Query.GlobalAuthorityID || original.Policy != p.service.config().Profile.PolicyNamespace || original.Input != p.identifier || original.GlobalVersion != p.directory.GlobalVersion || original.TenantVersion != p.directory.TenantVersion {
 		return identity.ForbiddenError{}
 	}
 	return nil
+}
+
+func (s *SigninService) decodeIdentifiedRateContext(wire []byte) (identifiedSigninContext, error) {
+	invalid := func() (identifiedSigninContext, error) { return identifiedSigninContext{}, identity.ForbiddenError{} }
+	if len(wire) == 0 || len(wire) > 4096 {
+		return invalid()
+	}
+	input := wire
+	if s.mfa != nil {
+		var selected struct{ Original json.RawMessage }
+		if json.Unmarshal(wire, &selected) != nil {
+			return invalid()
+		}
+		input = selected.Original
+	}
+	var original identifiedSigninContext
+	if json.Unmarshal(input, &original) != nil {
+		return invalid()
+	}
+	canonical, err := json.Marshal(original)
+	if err != nil {
+		return invalid()
+	}
+	// contextWire stores the selected MFA wrapper, not just the identified
+	// payload. Reuse its encoder to bind the current selection/custody digest
+	// while exact bytes reject unknown, duplicate and noncanonical fields.
+	canonical, err = s.signinMFAContext(canonical)
+	if err != nil || !bytes.Equal(canonical, wire) {
+		return invalid()
+	}
+	return original, nil
 }
 
 // CeremonyCreation.Generate in the pinned WebAuthn owner fixes this original

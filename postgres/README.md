@@ -458,6 +458,10 @@ its original account lookup was suppressed; it never projects account
 eligibility or a resolved user. Identifier-free metadata returns only its
 original anonymous flow dimension. These reads do no account lookup, risk
 admission, proof consumption, challenge transfer or session issuance.
+Identified options created by `NewMFASigninService` retain that exact selected
+MFA profile and custody binding for rate reads as well as completion. Reading
+them through the default or a differently configured MFA service denies; an
+enrolled and a suppressed account expose the same identifier-only dimensions.
 
 The original ceremony policy lifetime is fixed; a read never renews its expiry.
 Malformed, foreign, expired or wrong-mode custody returns no dimensions.

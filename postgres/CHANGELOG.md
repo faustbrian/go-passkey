@@ -2,6 +2,12 @@
 
 ## Unreleased
 
+- Preserve original identified signin rate metadata for the explicitly selected
+  passkey-primary/TOTP profile. Require the original canonical MFA selection and
+  custody binding without account lookup, risk admission or consumption; a rate
+  read still cannot issue a challenge or authenticate a user. Default and
+  discoverable signin behavior is unchanged.
+
 - Add an explicit native UV-passkey-primary to confirmed-TOTP challenge profile
   for identified and discoverable signin. Consume the genuine assertion and
   persist the original child atomically without any provisional session or

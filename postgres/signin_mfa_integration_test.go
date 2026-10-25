@@ -23,6 +23,7 @@ import (
 	"github.com/faustbrian/go-identity/session"
 	sessionpg "github.com/faustbrian/go-identity/session/postgres"
 	migrations "github.com/faustbrian/go-migrations/v3"
+	passkey "github.com/faustbrian/go-passkey"
 	database "github.com/faustbrian/go-postgres"
 	envelope "github.com/faustbrian/go-secret-envelope/v2"
 	"github.com/faustbrian/go-secret-envelope/v2/adapters/keyring"
@@ -132,11 +133,17 @@ func TestPasskeyMFAActualAssertionCreatesOnlyOriginalChallenge(t *testing.T) {
 			if discovery {
 				r, _ := f.discoverablePending(t)
 				command, flowID = r.CommandID, r.FlowID
+				assertSigninMFARateReads(t, f, func() (passkey.CeremonyRateSource, error) {
+					return f.signin.DiscoverableSigninRateSource(f.ctx, passkey.DiscoverableCeremonyRateRequest{DiscoverableSigninRequest: r.DiscoverableSigninRequest, CeremonyID: r.CeremonyID})
+				}, passkey.CeremonyRateSource{CeremonyID: r.CeremonyID, Lifetime: 5 * time.Minute, Kind: passkey.RateSourceAnonymousFlow, AnonymousFlowID: r.FlowID})
 				retry = func() (SigninResult, error) { return f.signin.DiscoverableSignin(f.ctx, r) }
 				result, err = f.signin.DiscoverableSignin(f.ctx, r)
 			} else {
 				r, _ := f.pending(t)
 				command, flowID = r.CommandID, r.FlowID
+				assertSigninMFARateReads(t, f, func() (passkey.CeremonyRateSource, error) {
+					return f.signin.SigninRateSource(f.ctx, passkey.SigninCeremonyRateRequest{SigninRequest: r.SigninRequest, CeremonyID: r.CeremonyID})
+				}, passkey.CeremonyRateSource{CeremonyID: r.CeremonyID, Lifetime: 5 * time.Minute, Kind: passkey.RateSourceIdentifier, Identifier: r.Identifier})
 				retry = func() (SigninResult, error) { return f.signin.Signin(f.ctx, r) }
 				result, err = f.signin.Signin(f.ctx, r)
 			}
@@ -190,6 +197,56 @@ func TestPasskeyMFAActualAssertionCreatesOnlyOriginalChallenge(t *testing.T) {
 			receipt, err := f.signin.RecoverSignin(f.ctx, q, recoveryCaller)
 			if err != nil || receipt.Outcome != identity.CommitOutcomeCommitted {
 				t.Fatal("metadata recovery", err)
+			}
+		})
+	}
+}
+
+func assertSigninMFARateReads(t *testing.T, f *signinFixture, read func() (passkey.CeremonyRateSource, error), want passkey.CeremonyRateSource) {
+	t.Helper()
+	before := rateAdmissionCount(t, f)
+	for range 2 {
+		source, err := read()
+		if err != nil || source != want {
+			t.Fatal("original selected-MFA rate metadata unavailable or disclosed eligibility", err)
+		}
+	}
+	var sessions, children, effects, consumed int
+	if err := f.pool.Raw().QueryRow(f.ctx, `SELECT (SELECT count(*) FROM session_store.sessions WHERE session_id<>'session-a'),(SELECT count(*) FROM identity_mfa.continuations WHERE origin_purpose='identity.passkey.signin-verify'),(SELECT count(*) FROM webauthn.effects WHERE purpose='identity.passkey.signin-verify'),(SELECT count(*) FROM session_store.preauth_transactions WHERE state='consumed')`).Scan(&sessions, &children, &effects, &consumed); err != nil || sessions != 0 || children != 0 || effects != 0 || consumed != 0 || rateAdmissionCount(t, f) != before {
+		t.Fatal("rate reads changed authentication or risk state", err, sessions, children, effects, consumed)
+	}
+}
+
+func TestPasskeyMFARateSourceBindsSelectionWithoutEligibilityOracle(t *testing.T) {
+	f, m := selectedSigninMFAFixture(t, false)
+	for _, identifier := range []string{"passkey@example.test", "absent@example.test"} {
+		t.Run(identifier, func(t *testing.T) {
+			r := f.request(t, session.BrowserSession)
+			r.Identifier = identifier
+			options, err := f.signin.AuthenticationOptions(f.ctx, r)
+			if err != nil {
+				t.Fatal(err)
+			}
+			ceremony, _ := options.Ceremony()
+			r.CommandID, _ = identity.NewCommandID()
+			request := passkey.SigninCeremonyRateRequest{SigninRequest: r, CeremonyID: ceremony.ID}
+			assertSigninMFARateReads(t, f, func() (passkey.CeremonyRateSource, error) {
+				return f.signin.SigninRateSource(f.ctx, request)
+			}, passkey.CeremonyRateSource{CeremonyID: ceremony.ID, Lifetime: 5 * time.Minute, Kind: passkey.RateSourceIdentifier, Identifier: identifier})
+			for _, selected := range []bool{false, true} {
+				var other *SigninService
+				if selected {
+					changed := m
+					changed.MaxAttempts++
+					other, err = NewMFASigninService(f.pool, f.signin.config(), changed)
+				} else {
+					other, err = NewSigninService(f.pool, f.signin.config())
+				}
+				if err != nil {
+					t.Fatal(err)
+				}
+				source, err := other.SigninRateSource(f.ctx, request)
+				requireNoRateSource(t, source, err)
 			}
 		})
 	}
