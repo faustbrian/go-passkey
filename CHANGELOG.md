@@ -2,6 +2,12 @@
 
 ## Unreleased
 
+- Add separate native RP/credential mapping observations and protected fences
+  for completed passkey/TOTP sessions. The same trusted session authority can
+  serve explicit MFA completion, reads and revocation without treating enrolled
+  TOTP as known-empty MFA. Consumers retain independent current factor and
+  credential checks and must acquire factor fences before mapping locks.
+
 - Add an explicit private TOTP challenge arm to signin results, retaining the
   original challenge identity, expiry and reveal-once child proof without a
   session or CSRF credential. Native MFA composition remains opt-in; existing

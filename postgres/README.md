@@ -391,6 +391,26 @@ session issuance, reads and revocation. It checks the original active mapping
 and known-empty MFA generation, not merely absence of a second-factor record.
 Missing, revoked, compromised, mismatched and newer authority denies.
 
+The same `SessionAuthority` separately implements the session owner's
+`MFAPasskeySessionAuthority` for completed UV-passkey plus TOTP records.
+`ObserveMFAPasskeySession` checks only the original native RP, handle generation
+and active credential reference/version. Its bounded mapping observation has no
+factor version: the native MFA owner independently checks the exact confirmed
+enrollment and factor generation. Projecting completed-session metadata does not
+authenticate an assertion or TOTP, issue a session or grant mapping authority.
+Kernel credential eligibility (including disabled references) remains the
+session/MFA consumer's independent responsibility.
+
+`RequireMFAPasskeySession` accepts only the original live registered native
+TOTP-completion or self-session-revoke-one invocation. The completion owner
+independently binds the exact frozen subject and stored session, including its
+final check; the mapping adapter preserves the original anonymous command rather
+than substituting a user-scoped Work. The caller must hold its actual factor
+fence **before** the RP/handle/credential mapping locks, as in native signin and
+enrollment. It must repeat the check before commit and abort on every error.
+Neither MFA method initializes authority, verifies a factor, retains Work or
+widens the legacy known-empty-factor methods.
+
 Reads begin their immutable twenty-second window before contributing IO.
 Protected checks use the original registered coordinator Work, with factor
 locks before mapping locks. Every error must abort that Work; this adapter does

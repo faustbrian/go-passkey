@@ -11,6 +11,8 @@ import (
 	"strings"
 	"time"
 
+	auth "github.com/faustbrian/go-authentication/v2"
+	"github.com/faustbrian/go-authorization/v3"
 	identity "github.com/faustbrian/go-identity"
 	mfapg "github.com/faustbrian/go-identity/mfa/postgres"
 	kernel "github.com/faustbrian/go-identity/postgres"
@@ -70,6 +72,7 @@ type SessionAuthority struct {
 }
 
 var _ sessionpg.PasskeySessionAuthority = (*SessionAuthority)(nil)
+var _ sessionpg.MFAPasskeySessionAuthority = (*SessionAuthority)(nil)
 
 // NewSessionAuthority freezes trusted configuration without IO. The same owned
 // instance/profile must be selected by session issuance, read and revocation.
@@ -158,6 +161,97 @@ func (a *SessionAuthority) RequirePasskeySession(ctx context.Context, w kernel.W
 		return err
 	}
 	return requireMappingAuthority(bounded, w.Query, c, spec, version, true)
+}
+
+func (a *SessionAuthority) mfaRecord(namespace string, record session.Session) (session.SessionSpec, uint64, error) {
+	s, version, factorVersion, err := a.record(namespace, record)
+	m, factorErr := record.MFAAuthentication().Bindings()
+	if err != nil || factorErr != nil || m.Method != "totp" || s.Authentication.Kind != session.AuthenticationVerified || s.Authentication.Proof.Method != "passkey" || s.Authentication.Proof.Purpose != session.PasskeyMFAPrimaryPurpose || s.Authentication.Proof.Assurance != auth.AssurancePhishingResistant || string(m.PrimaryCommandID) != string(s.Authentication.Proof.ID) || factorVersion != m.FactorAuthorityVersion {
+		return session.SessionSpec{}, 0, identity.ForbiddenError{}
+	}
+	if _, continued := record.CredentialContinuation(); continued {
+		return session.SessionSpec{}, 0, identity.ForbiddenError{}
+	}
+	v, err := s.Authority.Bindings()
+	factorKey, keyErr := mfapg.FactorAuthorityKey(s.TenantID, s.UserID)
+	if err != nil || keyErr != nil || v.Organization.Present || v.Factor.Binding.ScopeKey != factorKey {
+		return session.SessionSpec{}, 0, identity.ForbiddenError{}
+	}
+	return s, version, nil
+}
+
+// ObserveMFAPasskeySession compares only the original completed passkey/TOTP
+// record's active native RP/handle/credential mapping on the primary. The MFA
+// owner must independently check its original confirmed factor generation and
+// enrollment; no known-empty FactorVersion is inferred or returned. The
+// exclusive twenty-second mapping lease starts before all contributing IO.
+// Missing/changed mapping denies rather than adopting a replacement version.
+func (a *SessionAuthority) ObserveMFAPasskeySession(ctx context.Context, namespace string, record session.Session) (sessionpg.MFAPasskeySessionAuthorityObservation, error) {
+	started := time.Now().UTC()
+	if ctx == nil {
+		return sessionpg.MFAPasskeySessionAuthorityObservation{}, identity.ForbiddenError{}
+	}
+	if err := ctx.Err(); err != nil {
+		return sessionpg.MFAPasskeySessionAuthorityObservation{}, err
+	}
+	spec, version, err := a.mfaRecord(namespace, record)
+	if err != nil {
+		return sessionpg.MFAPasskeySessionAuthorityObservation{}, err
+	}
+	c := a.config()
+	bounded, stop := context.WithTimeout(ctx, c.MaximumDuration)
+	defer stop()
+	if err := requireMappingAuthority(bounded, a.pool.Raw().Query, c, spec, version, false); err != nil {
+		return sessionpg.MFAPasskeySessionAuthorityObservation{}, err
+	}
+	until := started.Add(20 * time.Second)
+	finished := time.Now().UTC()
+	if finished.Before(started) || !finished.Before(until) {
+		return sessionpg.MFAPasskeySessionAuthorityObservation{}, identity.ForbiddenError{}
+	}
+	return sessionpg.MFAPasskeySessionAuthorityObservation{PasskeyVersion: version, ReadStartedAt: started, ValidUntil: until}, nil
+}
+
+// RequireMFAPasskeySession locks only the original active native mapping in
+// exact registered TOTP-completion or self-session-revoke-one Work. The native
+// caller must already fence its current directory/credential/policy and actual
+// factor authority: factor locks MUST precede these RP/handle/credential locks,
+// matching signin and enrollment. This mapping-only port cannot supply factor
+// authentication or known-empty authority. Completion independently binds its
+// frozen subject/record through the kernel and session owner, including final
+// checks. Every error requires abort; no Work or transaction is retained here.
+func (a *SessionAuthority) RequireMFAPasskeySession(ctx context.Context, w kernel.Work, owner kernel.FeatureExecutionContributor, namespace string, record session.Session) error {
+	if ctx == nil {
+		return identity.ForbiddenError{}
+	}
+	if err := ctx.Err(); err != nil {
+		return err
+	}
+	s, version, err := a.mfaRecord(namespace, record)
+	if err != nil {
+		return err
+	}
+	b, f, life, err := w.FeatureScope(owner)
+	if err != nil || b.ValidateFor(f.Operation) != nil || b.TenantID != s.TenantID {
+		return identity.ForbiddenError{}
+	}
+	completion := identity.FeatureOperation{Owner: "identity/mfa", OperationID: "identity.mfa.totp-verify", SchemaID: "mfa-totp-verify", SchemaVersion: 1, RecordRequirement: identity.FeatureRecordOmitted, SubjectRequirement: identity.FeatureSubjectAnonymousFlow}
+	switch {
+	case f.Operation == completion && f.Contributor == (kernel.ContributorDescriptor{Owner: "identity/mfa/postgres", ContractID: "identity.mfa", Version: 1}):
+		m, _ := record.MFAAuthentication().Bindings()
+		if _, ok := owner.(kernel.MFACompletionContributor); !ok || b.UserID != "" || b.AnonymousFlowID == "" || b.CommandID != m.CommandID || life != (kernel.LifecyclePlan{EventType: "session.created.v1"}) || s.Version != 1 || s.FamilyVersion != 1 || !s.LastActivityAt.Equal(s.IssuedAt) {
+			return identity.ForbiddenError{}
+		}
+	case f.Operation == session.RevokeOneOperation() && f.Contributor == (kernel.ContributorDescriptor{Owner: "identity/session/postgres", ContractID: "identity.session.store", Version: 1}):
+		if b.UserID != s.UserID || b.AnonymousFlowID != "" || b.ActorKind != authorization.SubjectUser || string(b.ActorID) != string(s.UserID) || life.EventType != "session.revoked.v1" || life.EventIndex != 0 || life.BeforeVersion == 0 || life.BeforeVersion == ^uint64(0) || life.AfterVersion != life.BeforeVersion+1 || b.RecordID == s.SessionID && life.BeforeVersion != s.Version {
+			return identity.ForbiddenError{}
+		}
+	default:
+		return identity.ForbiddenError{}
+	}
+	bounded, stop := context.WithTimeout(ctx, a.config().MaximumDuration)
+	defer stop()
+	return requireMappingAuthority(bounded, w.Query, a.config(), s, version, true)
 }
 
 type authorityRows interface {
