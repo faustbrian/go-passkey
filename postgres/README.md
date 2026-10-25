@@ -643,5 +643,12 @@ another key through the existing three-phase enrollment API. The current key's
 fresh action-bound UV authorizes registration, not a signin assertion or reusable
 proof. Original confirmed TOTP, credential/session and assertion expiry remain
 fenced in each phase and final checks; the new key does not bypass account MFA.
-MFA key removal, OTP/recovery-code primary completion and organization-session
-profiles are not enabled by either selection.
+Set `SessionDeletionConfig.TOTP` separately to remove a key through the existing
+`DeleteOptions`, `Delete` and metadata-only `RecoverDelete` APIs. It requires
+fresh action-bound UV and another independently usable resident key, and fences
+the original confirmed factor/enrollment in Apply and final checks. Removal
+advances native passkey authority, invalidating prior sessions. Sign in with the
+surviving key and complete TOTP before recovering the original removal metadata;
+the removed generation cannot regain disclosure authority. This profile creates
+no additional mapping, session or replay store. OTP/recovery-code primary
+completion and organization-session profiles remain excluded.

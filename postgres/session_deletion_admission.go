@@ -170,7 +170,11 @@ func (p *sessionDeleteInvocation) current(ctx context.Context, w kernel.Work, ke
 	if err := p.read.ValidateAt(c.Clock.Now().UTC()); err != nil {
 		return err
 	}
-	directory, auth, policy, err := sessionpg.OriginalPasskeySessionAdmission(c.Profile, p.read.Session, p.binding())
+	admission := sessionpg.OriginalPasskeySessionAdmission
+	if c.TOTP {
+		admission = sessionpg.OriginalMFAPasskeySessionAdmission
+	}
+	directory, auth, policy, err := admission(c.Profile, p.read.Session, p.binding())
 	if err != nil {
 		return err
 	}
@@ -204,8 +208,14 @@ func (p *sessionDeleteInvocation) current(ctx context.Context, w kernel.Work, ke
 	if err := sessionpg.RequireSession(ctx, w, c.SessionRepository, p.read.Session); err != nil {
 		return err
 	}
-	if err := mfapg.RequirePasskeySessionFactors(ctx, w, p, p.read.Session); err != nil {
-		return err
+	var factorErr error
+	if c.TOTP {
+		factorErr = mfapg.RequireMFAPasskeySessionFactors(ctx, w, p, p.read.Session)
+	} else {
+		factorErr = mfapg.RequirePasskeySessionFactors(ctx, w, p, p.read.Session)
+	}
+	if factorErr != nil {
+		return factorErr
 	}
 	// Completion takes the kernel user's exclusive lock before these share
 	// admissions (via its provisional removal). Otherwise two self-removals

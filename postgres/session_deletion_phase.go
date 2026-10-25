@@ -184,7 +184,11 @@ func (p *sessionDeleteInvocation) ApplyFeature(ctx context.Context, w kernel.Wor
 		// UV, recovery, mapping, authority and required-effect failure rolls back.
 		// Directory locks precede the user, matching directory lifecycle writers.
 		c := p.service.owner.config()
-		directory, _, _, err := sessionpg.OriginalPasskeySessionAdmission(c.Profile, p.read.Session, p.binding())
+		admission := sessionpg.OriginalPasskeySessionAdmission
+		if c.TOTP {
+			admission = sessionpg.OriginalMFAPasskeySessionAdmission
+		}
+		directory, _, _, err := admission(c.Profile, p.read.Session, p.binding())
 		if err != nil {
 			return identity.FeatureReceipt{}, err
 		}

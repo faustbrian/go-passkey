@@ -2,6 +2,11 @@
 
 ## Unreleased
 
+- Admit explicitly selected completed passkey/TOTP sessions to resident-key
+  removal. Retain original factor/enrollment authority, fresh action-bound UV,
+  independent remaining-key safety and atomic session invalidation. The
+  ordinary known-empty profile and default selection are unchanged.
+
 - Explicitly select completed passkey/TOTP sessions for additional-key enrollment
   through the existing fresh-UV assertion, atomic registration authorization and
   credential creation phases. Retain original factor, session, credential and
