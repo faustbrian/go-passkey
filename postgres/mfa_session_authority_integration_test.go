@@ -5,6 +5,7 @@ package postgres
 import (
 	"context"
 	"errors"
+	"strings"
 	"testing"
 	"time"
 
@@ -273,10 +274,16 @@ type mfaMappingInvocation struct {
 	returned          kernel.Work
 }
 
-func (*mfaMappingInvocation) Descriptor() kernel.ContributorDescriptor {
+func (p *mfaMappingInvocation) Descriptor() kernel.ContributorDescriptor {
+	if strings.HasPrefix(p.mode, "update-") {
+		return kernel.ContributorDescriptor{Owner: "passkey/postgres", ContractID: "identity.passkey", Version: 1}
+	}
 	return kernel.ContributorDescriptor{Owner: "identity/session/postgres", ContractID: "identity.session.store", Version: 1}
 }
-func (*mfaMappingInvocation) FeatureOperations() []identity.FeatureOperation {
+func (p *mfaMappingInvocation) FeatureOperations() []identity.FeatureOperation {
+	if strings.HasPrefix(p.mode, "update-") {
+		return []identity.FeatureOperation{sessionUpdateOperation(strings.HasPrefix(p.mode, "update-assertion"))}
+	}
 	return []identity.FeatureOperation{session.RevokeOneOperation()}
 }
 func (p *mfaMappingInvocation) ValidateFeatureCommand(c identity.Command, _ kernel.CommandPlan) error {
@@ -289,10 +296,16 @@ func (p *mfaMappingInvocation) ApplyFeature(ctx context.Context, w kernel.Work, 
 	s, _ := p.record.Bindings()
 	m, _ := p.record.MFAAuthentication().Bindings()
 	// Same factor-before-mapping order as the actual native consumers.
-	if err := mfapg.RequireTOTPSessionFactor(ctx, w, p, s.UserID, m.FactorID, mfapg.TOTPSessionFactorState{EnrollmentVersion: m.EnrollmentVersion, AuthorityVersion: m.FactorAuthorityVersion}); err != nil {
-		return identity.FeatureReceipt{}, err
+	var factorErr error
+	if strings.HasPrefix(p.mode, "update-") {
+		factorErr = mfapg.RequireMFAPasskeySessionFactors(ctx, w, p, p.record)
+	} else {
+		factorErr = mfapg.RequireTOTPSessionFactor(ctx, w, p, s.UserID, m.FactorID, mfapg.TOTPSessionFactorState{EnrollmentVersion: m.EnrollmentVersion, AuthorityVersion: m.FactorAuthorityVersion})
 	}
-	if p.mode == "foreign-instance" {
+	if factorErr != nil {
+		return identity.FeatureReceipt{}, factorErr
+	}
+	if strings.HasSuffix(p.mode, "foreign-instance") {
 		foreign := *p
 		return identity.FeatureReceipt{}, p.store.RequireMFAPasskeySession(ctx, w, &foreign, p.store.config().RPNamespace, p.record)
 	}
@@ -332,7 +345,7 @@ func testMFAPasskeyMappingWork(t *testing.T, f *signinFixture, store *SessionAut
 		t.Fatal(err)
 	}
 	s, _ := record.Bindings()
-	for _, mode := range []string{"current-locks", "late-withdrawal", "foreign-instance", "foreign-subject", "sibling-target"} {
+	for _, mode := range []string{"current-locks", "late-withdrawal", "foreign-instance", "foreign-subject", "sibling-target", "update-options", "update-options-late-withdrawal", "update-options-foreign-instance", "update-assertion", "update-assertion-late-withdrawal", "update-assertion-foreign-instance"} {
 		t.Run(mode, func(t *testing.T) {
 			p := &mfaMappingInvocation{f: f, store: store, record: record, mode: mode}
 			registry, err := kernel.NewContributorRegistry([]kernel.Contributor{directory, auditing, lifecycle, p})
@@ -347,7 +360,13 @@ func testMFAPasskeyMappingWork(t *testing.T, f *signinFixture, store *SessionAut
 			if err != nil {
 				t.Fatal(err)
 			}
-			op := session.RevokeOneOperation()
+			op := p.FeatureOperations()[0]
+			life := kernel.LifecyclePlan{EventType: "session.revoked.v1", BeforeVersion: 1, AfterVersion: 2}
+			if strings.HasPrefix(mode, "update-options") {
+				life = kernel.LifecyclePlan{EventType: "passkey.reauthentication.started.v1", AfterVersion: 1}
+			} else if strings.HasPrefix(mode, "update-assertion") {
+				life.EventType = "identity.passkey.rename_credential"
+			}
 			b := identity.CommandBinding{CommandID: id, TenantID: s.TenantID, UserID: s.UserID, ActorID: identity.ActorID(s.UserID), ActorKind: authorization.SubjectUser, RecordID: s.SessionID, OperationID: op.OperationID, SchemaID: op.SchemaID, SchemaVersion: op.SchemaVersion, PolicyID: "component", PolicyVersion: 1, CorrelationID: "component"}
 			if mode == "foreign-subject" {
 				p.record = mfaMappingForeignRecord(t, record, "user")
@@ -364,7 +383,11 @@ func testMFAPasskeyMappingWork(t *testing.T, f *signinFixture, store *SessionAut
 			if err != nil {
 				t.Fatal(err)
 			}
-			seed, err := builder.Build(audit.RecordInput{OccurredAt: time.Now().UTC().Truncate(time.Microsecond), Action: op.OperationID, Outcome: audit.OutcomeSucceeded, Actor: audit.ActorInput{Kind: audit.ActorHuman, ID: string(s.UserID)}, Subject: audit.SubjectInput{Type: "session", ID: b.RecordID}, Context: audit.ContextInput{TenantID: string(s.TenantID), CorrelationID: b.CorrelationID}, Policy: audit.PolicyMetadata{PolicyID: b.PolicyID, Version: "1"}, Changes: audit.ChangeSetInput{Redacted: true}, Attributes: map[string]string{"command.id": string(id), "aggregate.type": "session", "aggregate.id": b.RecordID, "aggregate.before_version": "1", "aggregate.after_version": "2", "retention.class": "protected"}})
+			before, after := "1", "2"
+			if life.BeforeVersion == 0 {
+				before, after = "0", "1"
+			}
+			seed, err := builder.Build(audit.RecordInput{OccurredAt: time.Now().UTC().Truncate(time.Microsecond), Action: op.OperationID, Outcome: audit.OutcomeSucceeded, Actor: audit.ActorInput{Kind: audit.ActorHuman, ID: string(s.UserID)}, Subject: audit.SubjectInput{Type: "session", ID: b.RecordID}, Context: audit.ContextInput{TenantID: string(s.TenantID), CorrelationID: b.CorrelationID}, Policy: audit.PolicyMetadata{PolicyID: b.PolicyID, Version: "1"}, Changes: audit.ChangeSetInput{Redacted: true}, Attributes: map[string]string{"command.id": string(id), "aggregate.type": "session", "aggregate.id": b.RecordID, "aggregate.before_version": before, "aggregate.after_version": after, "retention.class": "protected"}})
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -372,11 +395,11 @@ func testMFAPasskeyMappingWork(t *testing.T, f *signinFixture, store *SessionAut
 			if err != nil {
 				t.Fatal(err)
 			}
-			plan, err := coordinator.PrepareCommandPlan(b, command, kernel.CommandPlan{Contributors: registry.Descriptors(), SubjectType: "session", Feature: &kernel.FeatureRegistration{Contributor: p.Descriptor(), Operation: op}, Lifecycle: &kernel.LifecyclePlan{EventType: "session.revoked.v1", BeforeVersion: 1, AfterVersion: 2}, Audits: []kernel.AuditPlan{{EventType: op.OperationID, SchemaVersion: 1, Required: true, RequiredRecordCount: 1, MaxRecordBytes: 16384, MaxAggregateBytes: 16384, RetentionPolicyVersion: 1, RetentionClass: "protected", BindingDigest: digest}}})
+			plan, err := coordinator.PrepareCommandPlan(b, command, kernel.CommandPlan{Contributors: registry.Descriptors(), SubjectType: "session", Feature: &kernel.FeatureRegistration{Contributor: p.Descriptor(), Operation: op}, Lifecycle: &life, Audits: []kernel.AuditPlan{{EventType: op.OperationID, SchemaVersion: 1, Required: true, RequiredRecordCount: 1, MaxRecordBytes: 16384, MaxAggregateBytes: 16384, RetentionPolicyVersion: 1, RetentionClass: "protected", BindingDigest: digest}}})
 			if err != nil {
 				t.Fatal(err)
 			}
-			if mode == "late-withdrawal" {
+			if strings.HasSuffix(mode, "late-withdrawal") {
 				if _, err := f.pool.Raw().Exec(f.ctx, `UPDATE identity_passkey.user_handles SET authority_version=authority_version+1`); err != nil {
 					t.Fatal(err)
 				}
@@ -391,14 +414,14 @@ func testMFAPasskeyMappingWork(t *testing.T, f *signinFixture, store *SessionAut
 			}
 			_, applyErr := coordinator.ApplyFeature(f.ctx, w, command)
 			_, _ = coordinator.Abort(w, applyErr)
-			want := mode == "current-locks" || mode == "sibling-target"
+			want := mode == "current-locks" || mode == "sibling-target" || mode == "update-options" || mode == "update-assertion"
 			if applyErr == nil || p.admitted != want || p.checked != (mode == "current-locks") {
 				t.Fatal("mapping Work scope/fence changed", applyErr, p.admitted, p.checked)
 			}
 			if err := store.RequireMFAPasskeySession(f.ctx, p.returned, p, store.config().RPNamespace, record); err == nil {
 				t.Fatal("returned Work retained mapping authority")
 			}
-			if mode == "late-withdrawal" {
+			if strings.HasSuffix(mode, "late-withdrawal") {
 				if _, err := f.pool.Raw().Exec(f.ctx, `UPDATE identity_passkey.user_handles SET authority_version=authority_version-1`); err != nil {
 					t.Fatal(err)
 				}

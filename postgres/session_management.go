@@ -42,6 +42,10 @@ type SessionManagementConfig struct {
 	Risk              *riskpg.Repository
 	PolicyID          string
 	PolicyVersion     uint64
+	// TOTP explicitly selects completed passkey/TOTP sessions instead of the
+	// ordinary known-empty profile. It enables label rename only, not enrolled
+	// factor enrollment/removal or another secondary-factor fallback.
+	TOTP bool
 }
 
 // SessionManagementService composes actual current-session and WebAuthn owners
@@ -110,7 +114,12 @@ func NewSessionManagementService(pool *database.Pool, c SessionManagementConfig)
 	if err != nil {
 		return nil, err
 	}
-	sessions, err := sessionpg.NewPasskeySessionService(pool, sessionpg.PasskeySessionServiceConfig{Repository: c.SessionRepository, Profile: c.Profile, Validation: c.Validation, Authority: authority})
+	var sessions *session.SessionService
+	if c.TOTP {
+		sessions, err = sessionpg.NewMFAPasskeySessionService(pool, sessionpg.MFAPasskeySessionServiceConfig{Repository: c.SessionRepository, Profile: c.Profile, Validation: c.Validation, Authority: authority})
+	} else {
+		sessions, err = sessionpg.NewPasskeySessionService(pool, sessionpg.PasskeySessionServiceConfig{Repository: c.SessionRepository, Profile: c.Profile, Validation: c.Validation, Authority: authority})
+	}
 	if err != nil {
 		return nil, err
 	}

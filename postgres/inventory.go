@@ -19,8 +19,10 @@ import (
 )
 
 // InventoryConfig selects one concrete native session reader and one trusted
-// tenant/RP. Exactly one Password or Passkey profile is required; there is no
-// try-another-method fallback after a denial. All histories must be installed
+// tenant/RP. Exactly one Password or Passkey profile is required. MFAPasskey
+// explicitly adds completed passkey/TOTP admission to Passkey, sharing its
+// repository and validation configuration. Stored provenance selects the owner;
+// there is no try-another-method fallback after a denial. All histories must be installed
 // in the borrowed primary pool. Rate must use the owned risk counter adapter
 // and StateNeutralRead policy; zero/missing/unknown counter results deny.
 // Authorization is a trusted bounded policy callback, not a domain store.
@@ -30,6 +32,7 @@ type InventoryConfig struct {
 	RPNamespace, RPID string
 	Password          *sessionpg.SessionServiceConfig
 	Passkey           *sessionpg.PasskeySessionServiceConfig
+	MFAPasskey        *sessionpg.MFAPasskeySessionAdmission
 	Protocol          webauthnpg.Config
 	Authorization     authorization.Service
 	PolicyVersion     uint64
@@ -68,7 +71,7 @@ func (InventoryService) Format(s fmt.State, _ rune) {
 // same trusted deployment, tenant/RP and session authority as enrollment/signin.
 // An unselected authentication profile is unavailable, never approximated.
 func NewInventoryService(pool *database.Pool, c InventoryConfig) (*InventoryService, error) {
-	if pool == nil || pool.Raw() == nil || c.Authorization == nil || c.Rate == nil || c.PolicyVersion == 0 || c.MaximumDuration < time.Millisecond || c.MaximumDuration > 5*time.Second || (c.Password == nil) == (c.Passkey == nil) {
+	if pool == nil || pool.Raw() == nil || c.Authorization == nil || c.Rate == nil || c.PolicyVersion == 0 || c.MaximumDuration < time.Millisecond || c.MaximumDuration > 5*time.Second || (c.Password == nil) == (c.Passkey == nil) || c.MFAPasskey != nil && c.Passkey == nil {
 		return nil, identity.InvalidInputError{Field: "passkey_inventory"}
 	}
 	if _, err := PasskeyAuthorityKey(c.RPNamespace, c.TenantID, "configuration"); err != nil || len(c.RPID) == 0 || len(c.RPID) > 253 {
@@ -87,7 +90,17 @@ func NewInventoryService(pool *database.Pool, c InventoryConfig) (*InventoryServ
 		if p.Profile.RPNamespace != c.RPNamespace {
 			return nil, identity.InvalidInputError{Field: "passkey_inventory"}
 		}
-		sessions, err = sessionpg.NewPasskeySessionService(pool, p)
+		if c.MFAPasskey == nil {
+			sessions, err = sessionpg.NewPasskeySessionService(pool, p)
+		} else {
+			sessions, err = sessionpg.NewSelectedSessionService(pool, sessionpg.SelectedSessionServiceConfig{
+				Repository: p.Repository, Validation: p.Validation,
+				Admission: sessionpg.SelectedSessionAdmissionConfig{
+					Passkey:    &sessionpg.PasskeySessionAdmission{Profile: p.Profile, Authority: p.Authority},
+					MFAPasskey: c.MFAPasskey,
+				},
+			})
+		}
 	}
 	if err != nil {
 		return nil, err
@@ -101,6 +114,7 @@ func NewInventoryService(pool *database.Pool, c InventoryConfig) (*InventoryServ
 	// Constructors above freeze selected reader configuration. Do not retain
 	// caller-mutable pointers to a profile that no longer determines admission.
 	c.Password, c.Passkey = nil, nil
+	c.MFAPasskey = nil
 	return &InventoryService{pool: pool, sessions: sessions, protocol: protocol, config: func() InventoryConfig { return c }}, nil
 }
 

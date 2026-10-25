@@ -213,7 +213,7 @@ func (a *SessionAuthority) ObserveMFAPasskeySession(ctx context.Context, namespa
 }
 
 // RequireMFAPasskeySession locks only the original active native mapping in
-// exact registered TOTP-completion or self-session-revoke-one Work. The native
+// exact registered TOTP-completion, label-update or self-session-revoke-one Work. The native
 // caller must already fence its current directory/credential/policy and actual
 // factor authority: factor locks MUST precede these RP/handle/credential locks,
 // matching signin and enrollment. This mapping-only port cannot supply factor
@@ -244,6 +244,17 @@ func (a *SessionAuthority) RequireMFAPasskeySession(ctx context.Context, w kerne
 		}
 	case f.Operation == session.RevokeOneOperation() && f.Contributor == (kernel.ContributorDescriptor{Owner: "identity/session/postgres", ContractID: "identity.session.store", Version: 1}):
 		if b.UserID != s.UserID || b.AnonymousFlowID != "" || b.ActorKind != authorization.SubjectUser || string(b.ActorID) != string(s.UserID) || life.EventType != "session.revoked.v1" || life.EventIndex != 0 || life.BeforeVersion == 0 || life.BeforeVersion == ^uint64(0) || life.AfterVersion != life.BeforeVersion+1 || b.RecordID == s.SessionID && life.BeforeVersion != s.Version {
+			return identity.ForbiddenError{}
+		}
+	case (f.Operation == sessionUpdateOperation(false) || f.Operation == sessionUpdateOperation(true)) && f.Contributor == (kernel.ContributorDescriptor{Owner: "passkey/postgres", ContractID: "identity.passkey", Version: 1}):
+		if b.UserID != s.UserID || b.AnonymousFlowID != "" || b.ActorKind != authorization.SubjectUser || b.ActorID != identity.ActorID(s.UserID) {
+			return identity.ForbiddenError{}
+		}
+		if f.Operation == sessionUpdateOperation(false) {
+			if life != (kernel.LifecyclePlan{EventType: "passkey.reauthentication.started.v1", AfterVersion: 1}) {
+				return identity.ForbiddenError{}
+			}
+		} else if life.EventType != "identity.passkey.rename_credential" || life.EventIndex != 0 || life.BeforeVersion == 0 || life.BeforeVersion == ^uint64(0) || life.AfterVersion != life.BeforeVersion+1 {
 			return identity.ForbiddenError{}
 		}
 	default:

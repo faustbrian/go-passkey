@@ -86,7 +86,11 @@ func (p *sessionUpdateInvocation) current(ctx context.Context, w kernel.Work, af
 	if err := p.read.ValidateAt(c.Clock.Now().UTC()); err != nil {
 		return err
 	}
-	directory, credential, policy, err := sessionpg.OriginalPasskeySessionAdmission(c.Profile, p.read.Session, p.binding())
+	admission := sessionpg.OriginalPasskeySessionAdmission
+	if c.TOTP {
+		admission = sessionpg.OriginalMFAPasskeySessionAdmission
+	}
+	directory, credential, policy, err := admission(c.Profile, p.read.Session, p.binding())
 	if err != nil {
 		return err
 	}
@@ -107,8 +111,14 @@ func (p *sessionUpdateInvocation) current(ctx context.Context, w kernel.Work, af
 	if err := sessionpg.RequireSession(ctx, w, c.SessionRepository, p.read.Session); err != nil {
 		return err
 	}
-	if err := mfapg.RequirePasskeySessionFactors(ctx, w, p, p.read.Session); err != nil {
-		return err
+	var factorErr error
+	if c.TOTP {
+		factorErr = mfapg.RequireMFAPasskeySessionFactors(ctx, w, p, p.read.Session)
+	} else {
+		factorErr = mfapg.RequirePasskeySessionFactors(ctx, w, p, p.read.Session)
+	}
+	if factorErr != nil {
+		return factorErr
 	}
 	// Factor -> RP/handle -> canonical credential-pair locks avoid upgrading a
 	// shared authenticating-key lock during self-rename, or opposing key order
@@ -150,8 +160,14 @@ func (p *sessionUpdateInvocation) current(ctx context.Context, w kernel.Work, af
 	if rowErr != nil || count != want {
 		return identity.ForbiddenError{}
 	}
-	if err := p.service.authority.RequirePasskeySession(ctx, w, p, c.Profile.RPNamespace, p.read.Session); err != nil {
-		return err
+	var mappingErr error
+	if c.TOTP {
+		mappingErr = p.service.authority.RequireMFAPasskeySession(ctx, w, p, c.Profile.RPNamespace, p.read.Session)
+	} else {
+		mappingErr = p.service.authority.RequirePasskeySession(ctx, w, p, c.Profile.RPNamespace, p.read.Session)
+	}
+	if mappingErr != nil {
+		return mappingErr
 	}
 	expected, label := p.request.ExpectedVersion, p.beforeLabel
 	if after && p.finish {

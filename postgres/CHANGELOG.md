@@ -2,6 +2,12 @@
 
 ## Unreleased
 
+- Explicitly select completed passkey/TOTP sessions for safe credential inventory
+  and fresh action-bound UV label rename. Preserve original confirmed enrollment,
+  factor generation, native mapping and session authority through protected
+  mutation and final checks. Ordinary known-empty and other secondary-factor
+  profiles do not become fallback paths; enrollment/removal are not enabled.
+
 - Preserve original identified signin rate metadata for the explicitly selected
   passkey-primary/TOTP profile. Require the original canonical MFA selection and
   custody binding without account lookup, risk admission or consumption; a rate

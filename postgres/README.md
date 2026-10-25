@@ -608,12 +608,35 @@ in `NewCookieRevokeOneExecutor`, retain current caller admission with
 dispatch intentionally denies cookie requests. Missing/wrong synchronizer
 custody cannot revoke or clear a session.
 
-Current native integration tests cover genuine action-proof/UV enrollment,
+Native integration tests cover genuine action-proof/UV enrollment,
 real owner constraints, denial, contention, required-effect rollback and actual
 before/after-COMMIT connection loss. Existing active session rows are explicit
-fixture input, not evidence of signup/signin provenance. External public-
-consumer qualification, independent final review and full release
-qualification remain unfinished. The selected flows do not enable
-passkey-first signup, completed MFA, organization authority,
-deletion, HTTP/reference routes or a UI. Those retained goals remain work;
-no complete authentication backend is claimed by this adapter yet.
+fixture input, not evidence of signup/signin provenance. Full release
+qualification and complete platform composition remain separate obligations;
+this adapter is not a UI or a complete identity platform by itself.
+
+### Credential management after passkey/TOTP signin
+
+`InventoryConfig.MFAPasskey` explicitly adds the native session owner's completed
+passkey/TOTP admission alongside `Passkey`. Supply its matching trusted profile
+and native mapping authority. Both selections share the `Passkey` repository
+and validation configuration, and stored provenance selects exactly one reader.
+There is no retry through another method after denial. Password inventory
+cannot also select this extension; omitted MFA admission retains prior behavior.
+
+For fresh UV label rename, set `SessionManagementConfig.TOTP` to true. This
+selects completed passkey/TOTP sessions instead of known-empty sessions; it is
+not a secondary-factor fallback. Use the existing `UpdateOptions` and `Update`
+APIs with original request keys, exact CSRF where selected, and a genuine new
+WebAuthn assertion bound to the intended target/version/label and source session.
+The original confirmed factor ID, enrollment and account generation remain
+current alongside credential/directory/policy, RP mapping and session authority.
+Factor locks precede mapping locks. Neither inventory nor management consumes a
+TOTP, adopts a newer generation or resets positive authority evidence freshness.
+
+Install the existing completed-passkey/MFA session, confirmed TOTP, mapping,
+metadata, request-key and protocol histories before selecting this profile.
+These additions create no new migration or private proof/session engine.
+Retries preserve the original outcome without another challenge or credential
+redisclosure. MFA additional-key enrollment/removal, OTP/recovery-code primary
+completion and organization-session profiles are not enabled by this selection.
