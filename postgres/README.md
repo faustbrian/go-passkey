@@ -3,6 +3,42 @@
 Experimental, incomplete and unreleased. The selected existing-account flow
 does not substitute for a complete passkey authentication platform.
 
+## Explicit passkey-primary and TOTP challenge
+
+`NewSigninService` still denies enrolled factors. Select
+`NewMFASigninService(pool, signinConfig, mfaConfig)` explicitly to use a genuine
+UV assertion as the non-final primary for an already confirmed TOTP account.
+Known-empty accounts retain the ordinary session result. Identified and
+discoverable options bind that exact selection before a browser assertion;
+completion cannot switch from the default profile or change the selected issuer,
+key ID, lifetime or attempt limit.
+
+The enrolled branch returns `SigninResult.Receipt` and `Challenge`, never a
+session, bearer or CSRF credential. The genuine WebAuthn transition, original
+continuation, child issuance, audit and lifecycle effect commit atomically.
+Original browser pre-authentication stays active for the independent factor
+owner to consume later. Parse the incoming cookie into a fresh `session.Token`
+per request: this selected branch uses its one-time input reveal to bind the
+existing command's browser custody, not to issue another cookie.
+
+Install existing kernel (including `PreparationMigrationSource`), passkey,
+WebAuthn, MFA TOTP/continuation and capability
+histories, then append the MFA owner's `PasskeyContinuationMigrationSource` with
+flags describing the already installed predecessor profiles. The passkey owner
+does not migrate or duplicate another owner's tables. `SigninMFAConfig` borrows
+an envelope service and retains its configured key ID for the original journal's
+recovery lifetime; signing, replay, child-checkpoint and primary-envelope keys
+must be independently managed under their existing owner contracts.
+
+`ReadMFAPasskeyPrimary` authenticates the actual issued child and committed
+parent before restoring the unchanged encrypted primary. Original issue time,
+expiry, remember choice, subject, credential and authority epochs are never
+renewed. It is provenance for the MFA completion owner, not permission to issue
+a session: that owner must verify actual TOTP and repeat current authority and
+original-browser checks atomically. `RecoverSignin` remains metadata-only and
+never reveals a historical child proof. Lost, unavailable or retired custody
+denies; it does not authorize regenerating a challenge or assuming rollback.
+
 ## Selected algorithms
 
 `Protocol.Algorithms` selects ES256 (`-7`), EdDSA (`-8`, Ed25519 only), or an

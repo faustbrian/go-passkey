@@ -2,6 +2,14 @@
 
 ## Unreleased
 
+- Add an explicit native UV-passkey-primary to confirmed-TOTP challenge profile
+  for identified and discoverable signin. Consume the genuine assertion and
+  persist the original child atomically without any provisional session or
+  CSRF credential. Retain original browser, remember, primary expiry and epochs
+  through authenticated journal recovery; default enrolled-factor denial and
+  known-empty signin/signup remain unchanged. Install the MFA owner's selected
+  passkey-continuation migration and retain original journal envelope keys.
+
 - Support explicitly selected Ed25519 and ordered mixed ES256/Ed25519 profiles
   through enrollment, passkey-only signup, signin and current-session key
   enrollment, rename and removal. Nil keeps ES256; empty, duplicate, unknown and

@@ -53,6 +53,8 @@ type signinInvocation struct {
 	output                                   SigninResult
 	result                                   identity.CommandResult
 	applied                                  bool
+	enrolled                                 bool
+	mfa                                      *signinMFAState
 }
 
 func (*signinInvocation) Descriptor() kernel.ContributorDescriptor {
@@ -79,6 +81,9 @@ func (p *signinInvocation) binding() identity.CommandBinding {
 	return b
 }
 func (p *signinInvocation) ValidateFeatureCommand(c identity.Command, plan kernel.CommandPlan) error {
+	if p.mfa != nil {
+		return p.validateMFACommand(c, plan)
+	}
 	if c != p.command {
 		return identity.ForbiddenError{}
 	}
@@ -134,6 +139,9 @@ func (p *signinInvocation) FinalizeAssertion(ctx context.Context, input webauthn
 		return webauthn.Credential{}, identity.CommitOutcomeInvalid, err
 	}
 	p.finalization, p.mutation = final, mutation
+	if p.enrolled {
+		return p.finalizeMFAChallenge(ctx)
+	}
 	p.issuer, err = session.NewPasskeySessionIssuerWithCSRF(p, p.service.config().Session, p.service.config().CSRF)
 	if err != nil {
 		return webauthn.Credential{}, identity.CommitOutcomeInvalid, err
@@ -234,6 +242,9 @@ func (p *signinInvocation) sessionSpec() (session.SessionSpec, error) {
 	c := p.service.config()
 	b := p.binding()
 	now := c.Clock.Now().UTC().Truncate(time.Microsecond)
+	if p.enrolled {
+		now = now.Truncate(time.Second)
+	}
 	if !now.Before(p.mutation.Ceremony.ExpiresAt) {
 		return session.SessionSpec{}, identity.ForbiddenError{}
 	}
@@ -271,6 +282,13 @@ func (p *signinInvocation) sessionSpec() (session.SessionSpec, error) {
 	}
 	flow, _ := p.flow.Bindings()
 	proof := auth.Proof{ID: auth.ProofID(b.CommandID), Tenant: string(b.TenantID), Subject: string(b.UserID), Method: "passkey", Assurance: auth.AssurancePhishingResistant, Purpose: "session-issue", Audience: c.Profile.Audience, IssuedAt: now, ExpiresAt: p.mutation.Ceremony.ExpiresAt}
+	if p.enrolled {
+		proof.Purpose = session.PasskeyMFAPrimaryPurpose
+		// MFA continuations and their signed capability timestamps require UTC
+		// whole seconds (mfa.ContinuationSpec). Round down once at original
+		// primary creation; never extend the verified ceremony's deadline.
+		proof.ExpiresAt = proof.ExpiresAt.Truncate(time.Second)
+	}
 	return session.SessionSpec{SessionID: b.RecordID, FamilyID: string(family), TenantID: b.TenantID, UserID: b.UserID, Audience: c.Profile.Audience, Version: 1, FamilyVersion: 1, Remember: flow.Binding.Intent.Remember, Authority: vector, Authentication: session.AuthenticationMetadata{Kind: session.AuthenticationVerified, Proof: proof, ProofVersion: 1, CredentialID: string(p.reference.ID), CredentialVersion: p.reference.Version}, IssuedAt: now, LastActivityAt: now}, nil
 }
 
@@ -278,7 +296,7 @@ func (p *signinInvocation) policyScope() policy.AuthorityScope {
 	return policy.AuthorityScope{TenantID: authorization.TenantID(p.user().TenantID), PolicyNamespace: p.service.config().Profile.PolicyNamespace, SubjectID: authorization.SubjectID(p.user().ID)}
 }
 
-func (p *signinInvocation) execute(ctx context.Context, command identity.Command) (identity.CommandResult, error) {
+func (p *signinInvocation) authorize(ctx context.Context) error {
 	c := p.service.config()
 	b := p.binding()
 	resource := authorization.Resource{Type: "identity.user", ID: authorization.ResourceID(b.UserID)}
@@ -288,8 +306,16 @@ func (p *signinInvocation) execute(ctx context.Context, command identity.Command
 	caller := authorization.DecisionContext{PolicyRevision: authorization.Revision(c.Flow.PolicyVersion), CorrelationID: b.CorrelationID, Request: authorization.Request{Subject: authorization.Subject{ID: authorization.SubjectID(b.ActorID), Kind: b.ActorKind}, Tenant: authorization.TenantID(b.TenantID), Action: authorization.Action(b.OperationID), Resource: resource}}
 	decision, err := c.Authorization.Decide(ctx, caller)
 	if err != nil || decision.Outcome != authorization.Allow || uint64(decision.Revision) != b.PolicyVersion {
-		return identity.CommandResult{}, identity.ForbiddenError{}
+		return identity.ForbiddenError{}
 	}
+	return nil
+}
+
+func (p *signinInvocation) execute(ctx context.Context, command identity.Command) (identity.CommandResult, error) {
+	if err := p.authorize(ctx); err != nil {
+		return identity.CommandResult{}, err
+	}
+	b := p.binding()
 	coordinator, registry, err := p.runtime()
 	if err != nil {
 		return identity.CommandResult{}, err
@@ -332,7 +358,11 @@ func (p *signinInvocation) runtime() (*kernel.Coordinator, *kernel.ContributorRe
 	if err != nil {
 		return nil, nil, err
 	}
-	r, err := kernel.NewContributorRegistry([]kernel.Contributor{p.service.directory, a, l, p})
+	contributors := []kernel.Contributor{p.service.directory, a, l, p}
+	if p.mfa != nil {
+		contributors = append(contributors, p.service.mfa.issuer)
+	}
+	r, err := kernel.NewContributorRegistry(contributors)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -374,12 +404,27 @@ func (p *signinInvocation) current(ctx context.Context, w kernel.Work) error {
 			if err := w.RequireRecipient(ctx, p, p.recipient); err != nil {
 				return err
 			}
+			if p.mfa != nil {
+				// The challenge arm does not run the session effect's credential
+				// guard. Fence the exact verified reference here, not only its
+				// recipient and aggregate authority epochs.
+				a := p.userAuthority()
+				if _, err := w.RequireActiveCredential(ctx, p, kernel.CredentialAdmission{Credential: p.reference, UserAuthorityVersion: a.UserAuthorityVersion, IdentifierAuthorityVersion: a.IdentifierAuthorityVersion, CredentialAuthorityVersion: a.CredentialAuthorityVersion}); err != nil {
+					return err
+				}
+			}
 		}
 		if err := w.RequireActiveUserAuthorization(ctx, p, kernel.UserAuthorizationAdmission{Scope: p.policyScope(), Version: p.policy}); err != nil {
 			return err
 		}
-		if err := mfapg.RequirePasskeySessionFactors(ctx, w, p, p.record); err != nil {
-			return err
+		var factorErr error
+		if p.mfa != nil {
+			factorErr = mfapg.RequirePasskeySigninFactors(ctx, w, p, p.command, p.user().ID, p.factor)
+		} else {
+			factorErr = mfapg.RequirePasskeySessionFactors(ctx, w, p, p.record)
+		}
+		if factorErr != nil {
+			return factorErr
 		}
 		if err := p.lockMapping(ctx, w); err != nil {
 			return err
@@ -400,6 +445,9 @@ func (p *signinInvocation) current(ctx context.Context, w kernel.Work) error {
 }
 
 func (p *signinInvocation) ApplyFeature(ctx context.Context, w kernel.Work, c identity.Command) (identity.FeatureReceipt, error) {
+	if p.mfa != nil {
+		return p.applyMFAChallenge(ctx, w, c)
+	}
 	if c != p.command {
 		return identity.FeatureReceipt{}, identity.ForbiddenError{}
 	}
@@ -450,6 +498,9 @@ func (p *signinInvocation) ApplyFeature(ctx context.Context, w kernel.Work, c id
 }
 
 func (p *signinInvocation) CheckFeatureCommit(ctx context.Context, w kernel.Work, c identity.Command) error {
+	if p.mfa != nil {
+		return p.checkMFAChallenge(ctx, w, c)
+	}
 	if c != p.command {
 		return identity.ForbiddenError{}
 	}
@@ -516,7 +567,11 @@ func (p *signinInvocation) contextWire() ([]byte, error) {
 	if err != nil {
 		return nil, err
 	}
-	return json.Marshal(identifiedSigninContext{string(flow.Binding.ID), string(p.recipient.User.ID), string(p.recipient.Identifier.ID), p.service.config().Profile.RPNamespace, p.directory.Query.GlobalAuthorityID, p.service.config().Profile.PolicyNamespace, p.identifier, p.directory.GlobalVersion, p.directory.TenantVersion, p.recipient.UserAuthorityVersion, p.recipient.IdentifierAuthorityVersion, p.recipient.CredentialAuthorityVersion, p.factor, p.passkey, p.policy, p.recipient.Identifier.Version, p.recipient.Verification.Version})
+	wire, err := json.Marshal(identifiedSigninContext{string(flow.Binding.ID), string(p.recipient.User.ID), string(p.recipient.Identifier.ID), p.service.config().Profile.RPNamespace, p.directory.Query.GlobalAuthorityID, p.service.config().Profile.PolicyNamespace, p.identifier, p.directory.GlobalVersion, p.directory.TenantVersion, p.recipient.UserAuthorityVersion, p.recipient.IdentifierAuthorityVersion, p.recipient.CredentialAuthorityVersion, p.factor, p.passkey, p.policy, p.recipient.Identifier.Version, p.recipient.Verification.Version})
+	if err != nil {
+		return nil, err
+	}
+	return p.service.signinMFAContext(wire)
 }
 func (p *signinInvocation) context(ctx context.Context, w kernel.Work, create bool) error {
 	wire, err := p.contextWire()
@@ -586,6 +641,13 @@ func (p *signinInvocation) RecoverParticipant(ctx context.Context, w kernel.Reco
 		return status, err
 	}
 	if p.operation == signinOperation(true) {
+		if _, e := w.PasskeyMFAChallenge(p); e == nil {
+			child, e := p.recoverMFAChallenge(ctx, w)
+			if e != nil || child != status {
+				return kernel.RecoveryUnknown, e
+			}
+			return status, nil
+		}
 		sessions, err := p.service.effect.Recover(ctx, w, p)
 		if err != nil || sessions != status {
 			return kernel.RecoveryUnknown, err

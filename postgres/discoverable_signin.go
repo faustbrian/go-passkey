@@ -11,6 +11,7 @@ import (
 
 	"github.com/faustbrian/go-authorization/v3"
 	policy "github.com/faustbrian/go-authorization/v3/postgres"
+	"github.com/faustbrian/go-capability/v2"
 	identity "github.com/faustbrian/go-identity"
 	mfapg "github.com/faustbrian/go-identity/mfa/postgres"
 	kernel "github.com/faustbrian/go-identity/postgres"
@@ -53,8 +54,10 @@ func (s *SigninService) DiscoverableAuthenticationOptions(ctx context.Context, r
 
 // DiscoverableSignin cryptographically resolves credential and resident handle
 // together, then admits the current identity, exact native mapping and known-
-// empty secondary-factor policy. Original flow, root counter transition, session,
-// CSRF and required audit/outbox effects finalize in the existing sole Work.
+// empty secondary-factor policy, or the explicitly selected TOTP challenge.
+// Known-empty flow/counter/session/CSRF effects finalize in the existing sole
+// Work. Enrolled accounts commit assertion/child effects with no session or CSRF;
+// the original browser stays active until the independent factor completes.
 // No provisional, historical or ambiguous result reveals authentication. Use
 // RecoverSignin for metadata-only reconciliation; it never reissues secrets.
 func (s *SigninService) DiscoverableSignin(ctx context.Context, r DiscoverableSigninCompletion) (SigninResult, error) {
@@ -89,6 +92,11 @@ func (s *SigninService) DiscoverableSignin(ctx context.Context, r DiscoverableSi
 		out := p.output
 		out.Session.Token, out.Session.Session, out.Session.Cookie = session.Token{}, session.Session{}, http.Cookie{}
 		out.CSRF = session.CSRFToken{}
+		if out.Challenge != nil {
+			child := *out.Challenge
+			child.Proof = capability.Proof{}
+			out.Challenge = &child
+		}
 		return out, err
 	}
 	p.output.CounterRisk = verified.CounterRisk()
@@ -147,7 +155,7 @@ AND c.credential_id=$5 AND h.user_handle=$6 AND c.state='active'`, c.Profile.RPN
 		return identity.ForbiddenError{}
 	}
 	factor, enrolled, err := mfapg.ReadPasswordSigninFactors(ctx, p.service.pool, c.Protocol.TenantID, m.Before.UserID, c.Protocol.MaximumDuration)
-	if err != nil || enrolled {
+	if err != nil || enrolled && p.service.mfa == nil {
 		return identity.ForbiddenError{}
 	}
 	pol, err := p.service.policy.Get(ctx, policy.AuthorityScope{TenantID: authorization.TenantID(c.Protocol.TenantID), PolicyNamespace: c.Profile.PolicyNamespace, SubjectID: authorization.SubjectID(m.Before.UserID)})
@@ -157,6 +165,7 @@ AND c.credential_id=$5 AND h.user_handle=$6 AND c.state='active'`, c.Profile.RPN
 	p.selectedUser = status.User
 	p.selected = kernel.CredentialAdmission{Credential: reference, UserAuthorityVersion: status.AuthorityVersion, IdentifierAuthorityVersion: identifiers.AuthorityVersion, CredentialAuthorityVersion: credential.AuthorityVersion}
 	p.reference, p.factor, p.passkey, p.policy, p.protocolVersion = reference, factor, passkey, pol.Version, m.Before.Version
+	p.enrolled = enrolled
 	p.handle = bytes.Clone(handle)
 	return nil
 }
@@ -189,11 +198,19 @@ func (p *signinInvocation) discoverableContextWire(target bool) ([]byte, error) 
 		IssuedAt, ExpiresAt                                        time.Time
 	}{"resident-discoverable-v1", string(flow.Binding.ID), deploymentDigest, c.Protocol.RelyingParty.Version, p.directory.GlobalVersion, p.directory.TenantVersion, c.Flow.PolicyVersion, flow.Binding.IssuedAt, flow.Binding.ExpiresAt}
 	if !target || p.selectedUser.ID == "" {
-		return json.Marshal(original)
+		wire, err := json.Marshal(original)
+		if err != nil {
+			return nil, err
+		}
+		return p.service.signinMFAContext(wire)
 	}
-	return json.Marshal(struct {
+	wire, err := json.Marshal(struct {
 		Original                                                                                     any
 		User, Reference                                                                              string
 		UserVersion, IdentifierVersion, CredentialVersion, ReferenceVersion, Factor, Passkey, Policy uint64
 	}{original, string(p.selectedUser.ID), string(p.reference.ID), p.selected.UserAuthorityVersion, p.selected.IdentifierAuthorityVersion, p.selected.CredentialAuthorityVersion, p.reference.Version, p.factor, p.passkey, p.policy})
+	if err != nil {
+		return nil, err
+	}
+	return p.service.signinMFAContext(wire)
 }

@@ -16,6 +16,7 @@ import (
 	"github.com/faustbrian/go-audit"
 	"github.com/faustbrian/go-authorization/v3"
 	policy "github.com/faustbrian/go-authorization/v3/postgres"
+	"github.com/faustbrian/go-capability/v2"
 	"github.com/faustbrian/go-clock"
 	identity "github.com/faustbrian/go-identity"
 	mfapg "github.com/faustbrian/go-identity/mfa/postgres"
@@ -38,7 +39,8 @@ import (
 // email is mandatory at completion through the identified methods. The additive
 // Discoverable methods explicitly select identifier-free signin with the risk
 // owner's startup opt-in. No signup, completed-MFA or organization profile is
-// enabled.
+// enabled. NewMFASigninService explicitly adds the challenge-only TOTP profile;
+// it does not complete MFA or change NewSigninService's enrolled-factor denial.
 type SigninConfig struct {
 	// OptionsRequests explicitly enables the additive keyed options APIs only.
 	OptionsRequests OptionsRequestConfig
@@ -76,6 +78,7 @@ type SigninService struct {
 	policy    *policy.AuthorityStore
 	risk      risk.AuthenticationAdmissionCustody
 	effect    *sessionpg.PasskeySigninEffect
+	mfa       *signinMFAComposition
 }
 
 func (SigninConfig) Format(s fmt.State, _ rune) {
@@ -309,7 +312,7 @@ func (p *signinInvocation) prepareRecipient(ctx context.Context) error {
 		return identity.ForbiddenError{}
 	}
 	factor, enrolled, err := mfapg.ReadPasswordSigninFactors(ctx, s.pool, c.Protocol.TenantID, recipient.User.ID, c.Protocol.MaximumDuration)
-	if err != nil || enrolled {
+	if err != nil || enrolled && s.mfa == nil {
 		return identity.ForbiddenError{}
 	}
 	pol, err := s.policy.Get(ctx, policy.AuthorityScope{TenantID: authorization.TenantID(c.Protocol.TenantID), PolicyNamespace: c.Profile.PolicyNamespace, SubjectID: authorization.SubjectID(recipient.User.ID)})
@@ -317,6 +320,7 @@ func (p *signinInvocation) prepareRecipient(ctx context.Context) error {
 		return identity.ForbiddenError{}
 	}
 	p.recipient, p.factor, p.policy = recipient, factor, pol.Version
+	p.enrolled = enrolled
 	return p.readMapping(ctx)
 }
 
@@ -343,7 +347,9 @@ func (s *SigninService) AuthenticationOptions(ctx context.Context, r SigninReque
 
 // Signin verifies genuine original-service-attributed browser assertion before
 // the self-human final command consumes flow, protocol transition and native
-// session effects atomically. No provisional bearer or proof is exposed.
+// session effects atomically for known-empty accounts. Explicit MFA composition
+// instead consumes only the assertion and creates the original TOTP challenge;
+// browser consumption and session issuance wait for independent factor proof.
 func (s *SigninService) Signin(ctx context.Context, r SigninCompletion) (SigninResult, error) {
 	if ctx == nil || s == nil || s.config == nil || len(r.CeremonyID) != 22 || len(r.Response) == 0 || len(r.Response) > 262144 {
 		return SigninResult{}, identity.InvalidInputError{Field: "passkey_signin"}
@@ -385,6 +391,11 @@ func (s *SigninService) Signin(ctx context.Context, r SigninCompletion) (SigninR
 		out := p.output
 		out.Session.Token, out.Session.Session, out.Session.Cookie = session.Token{}, session.Session{}, http.Cookie{}
 		out.CSRF = session.CSRFToken{}
+		if out.Challenge != nil {
+			child := *out.Challenge
+			child.Proof = capability.Proof{}
+			out.Challenge = &child
+		}
 		return out, err
 	}
 	p.output.CounterRisk = verified.CounterRisk()

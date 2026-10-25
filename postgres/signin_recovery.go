@@ -28,6 +28,9 @@ func (s *SigninService) RecoverSignin(ctx context.Context, q identity.RecoveryQu
 	ctx, stop := context.WithTimeout(ctx, c.Protocol.MaximumDuration)
 	defer stop()
 	p := &signinInvocation{Store: s.protocol, service: s, operation: op}
+	if finish && s.mfa != nil {
+		p.mfa = &signinMFAState{}
+	}
 	coordinator, _, err := p.runtime()
 	if err != nil {
 		return identity.CommandResult{}, err
