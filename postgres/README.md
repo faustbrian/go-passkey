@@ -638,5 +638,10 @@ Install the existing completed-passkey/MFA session, confirmed TOTP, mapping,
 metadata, request-key and protocol histories before selecting this profile.
 These additions create no new migration or private proof/session engine.
 Retries preserve the original outcome without another challenge or credential
-redisclosure. MFA additional-key enrollment/removal, OTP/recovery-code primary
-completion and organization-session profiles are not enabled by this selection.
+redisclosure. Set `SessionEnrollmentConfig.TOTP` to true independently to add
+another key through the existing three-phase enrollment API. The current key's
+fresh action-bound UV authorizes registration, not a signin assertion or reusable
+proof. Original confirmed TOTP, credential/session and assertion expiry remain
+fenced in each phase and final checks; the new key does not bypass account MFA.
+MFA key removal, OTP/recovery-code primary completion and organization-session
+profiles are not enabled by either selection.

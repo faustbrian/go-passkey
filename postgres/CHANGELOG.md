@@ -2,6 +2,11 @@
 
 ## Unreleased
 
+- Explicitly select completed passkey/TOTP sessions for additional-key enrollment
+  through the existing fresh-UV assertion, atomic registration authorization and
+  credential creation phases. Retain original factor, session, credential and
+  evidence deadlines without fallback. Key removal remains separately disabled.
+
 - Explicitly select completed passkey/TOTP sessions for safe credential inventory
   and fresh action-bound UV label rename. Preserve original confirmed enrollment,
   factor generation, native mapping and session authority through protected

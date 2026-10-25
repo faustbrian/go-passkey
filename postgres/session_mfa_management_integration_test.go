@@ -49,4 +49,15 @@ func TestPasskeyMFAInventoryAndManagementSelectionsStayExplicit(t *testing.T) {
 	if err == nil || out.CommandID != "" {
 		t.Fatal("TOTP management fell back to genuine ordinary session")
 	}
+	enrollment, err := NewSessionEnrollmentService(f.pool, c)
+	if err != nil {
+		t.Fatal("explicit TOTP enrollment construction", err)
+	}
+	caller := f.request.Caller.Clone()
+	caller.Request.Action = "identity.passkey.register-options"
+	request := passkey.NewSessionEnrollmentRequest(passkey.SessionEnrollmentRequestSpec{Credential: f.request.Credential, Caller: caller, Origin: f.request.Origin, Network: f.request.Network})
+	options, err := enrollment.EnrollmentAssertionOptions(f.ctx, passkey.SessionEnrollmentOptionsRequest{SessionEnrollmentRequest: request, IdempotencyKey: optionsKey(t, "mfa-enrollment-does-not-adopt-ordinary")})
+	if _, present := options.Options.Ceremony(); err == nil || options.CommandID != "" || present {
+		t.Fatal("TOTP enrollment fell back to genuine ordinary session")
+	}
 }

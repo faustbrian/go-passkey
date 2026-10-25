@@ -350,7 +350,11 @@ func (p *sessionEnrollmentInvocation) current(ctx context.Context, w kernel.Work
 	if err := p.read.ValidateAt(c.Clock.Now().UTC()); err != nil {
 		return err
 	}
-	directory, credential, policy, err := sessionpg.OriginalPasskeySessionAdmission(c.Profile, p.read.Session, p.binding())
+	admission := sessionpg.OriginalPasskeySessionAdmission
+	if c.TOTP {
+		admission = sessionpg.OriginalMFAPasskeySessionAdmission
+	}
+	directory, credential, policy, err := admission(c.Profile, p.read.Session, p.binding())
 	if err != nil {
 		return err
 	}
@@ -366,8 +370,14 @@ func (p *sessionEnrollmentInvocation) current(ctx context.Context, w kernel.Work
 	if err := sessionpg.RequireSession(ctx, w, c.SessionRepository, p.read.Session); err != nil {
 		return err
 	}
-	if err := mfapg.RequirePasskeySessionFactors(ctx, w, p, p.read.Session); err != nil {
-		return err
+	var factorErr error
+	if c.TOTP {
+		factorErr = mfapg.RequireMFAPasskeySessionFactors(ctx, w, p, p.read.Session)
+	} else {
+		factorErr = mfapg.RequirePasskeySessionFactors(ctx, w, p, p.read.Session)
+	}
+	if factorErr != nil {
+		return factorErr
 	}
 	// Keep native mapping mutations' existing factor -> RP/handle -> credential
 	// lock order. Serializing this existing mapping root prevents competing
@@ -384,8 +394,14 @@ func (p *sessionEnrollmentInvocation) current(ctx context.Context, w kernel.Work
 	if !valid {
 		return identity.ForbiddenError{}
 	}
-	if err := p.service.owner.authority.RequirePasskeySession(ctx, w, p, c.Profile.RPNamespace, p.read.Session); err != nil {
-		return err
+	var mappingErr error
+	if c.TOTP {
+		mappingErr = p.service.owner.authority.RequireMFAPasskeySession(ctx, w, p, c.Profile.RPNamespace, p.read.Session)
+	} else {
+		mappingErr = p.service.owner.authority.RequirePasskeySession(ctx, w, p, c.Profile.RPNamespace, p.read.Session)
+	}
+	if mappingErr != nil {
+		return mappingErr
 	}
 	now, err := w.DatabaseTime(ctx)
 	if err != nil || p.read.ValidateAt(now.UTC()) != nil || !p.ceiling.IsZero() && !now.Before(p.ceiling) {

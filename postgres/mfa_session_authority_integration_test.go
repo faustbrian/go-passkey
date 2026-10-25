@@ -271,16 +271,26 @@ type mfaMappingInvocation struct {
 	command           identity.Command
 	mode              string
 	admitted, checked bool
+	factorChecked     bool
 	returned          kernel.Work
 }
 
 func (p *mfaMappingInvocation) Descriptor() kernel.ContributorDescriptor {
-	if strings.HasPrefix(p.mode, "update-") {
+	if strings.HasPrefix(p.mode, "update-") || strings.HasPrefix(p.mode, "enroll-") {
 		return kernel.ContributorDescriptor{Owner: "passkey/postgres", ContractID: "identity.passkey", Version: 1}
 	}
 	return kernel.ContributorDescriptor{Owner: "identity/session/postgres", ContractID: "identity.session.store", Version: 1}
 }
 func (p *mfaMappingInvocation) FeatureOperations() []identity.FeatureOperation {
+	if strings.HasPrefix(p.mode, "enroll-") {
+		stage := 0
+		if strings.HasPrefix(p.mode, "enroll-registration-options") {
+			stage = 1
+		} else if strings.HasPrefix(p.mode, "enroll-register") {
+			stage = 2
+		}
+		return []identity.FeatureOperation{sessionEnrollmentOperation(stage)}
+	}
 	if strings.HasPrefix(p.mode, "update-") {
 		return []identity.FeatureOperation{sessionUpdateOperation(strings.HasPrefix(p.mode, "update-assertion"))}
 	}
@@ -297,7 +307,7 @@ func (p *mfaMappingInvocation) ApplyFeature(ctx context.Context, w kernel.Work, 
 	m, _ := p.record.MFAAuthentication().Bindings()
 	// Same factor-before-mapping order as the actual native consumers.
 	var factorErr error
-	if strings.HasPrefix(p.mode, "update-") {
+	if strings.HasPrefix(p.mode, "update-") || strings.HasPrefix(p.mode, "enroll-") {
 		factorErr = mfapg.RequireMFAPasskeySessionFactors(ctx, w, p, p.record)
 	} else {
 		factorErr = mfapg.RequireTOTPSessionFactor(ctx, w, p, s.UserID, m.FactorID, mfapg.TOTPSessionFactorState{EnrollmentVersion: m.EnrollmentVersion, AuthorityVersion: m.FactorAuthorityVersion})
@@ -305,6 +315,7 @@ func (p *mfaMappingInvocation) ApplyFeature(ctx context.Context, w kernel.Work, 
 	if factorErr != nil {
 		return identity.FeatureReceipt{}, factorErr
 	}
+	p.factorChecked = true
 	if strings.HasSuffix(p.mode, "foreign-instance") {
 		foreign := *p
 		return identity.FeatureReceipt{}, p.store.RequireMFAPasskeySession(ctx, w, &foreign, p.store.config().RPNamespace, p.record)
@@ -345,7 +356,13 @@ func testMFAPasskeyMappingWork(t *testing.T, f *signinFixture, store *SessionAut
 		t.Fatal(err)
 	}
 	s, _ := record.Bindings()
-	for _, mode := range []string{"current-locks", "late-withdrawal", "foreign-instance", "foreign-subject", "sibling-target", "update-options", "update-options-late-withdrawal", "update-options-foreign-instance", "update-assertion", "update-assertion-late-withdrawal", "update-assertion-foreign-instance"} {
+	modes := []string{"current-locks", "late-withdrawal", "foreign-instance", "foreign-subject", "sibling-target", "update-options", "update-options-late-withdrawal", "update-options-foreign-instance", "update-assertion", "update-assertion-late-withdrawal", "update-assertion-foreign-instance"}
+	for _, stage := range []string{"enroll-assertion-options", "enroll-registration-options", "enroll-register"} {
+		for _, suffix := range []string{"", "-late-withdrawal", "-foreign-instance"} {
+			modes = append(modes, stage+suffix)
+		}
+	}
+	for _, mode := range modes {
 		t.Run(mode, func(t *testing.T) {
 			p := &mfaMappingInvocation{f: f, store: store, record: record, mode: mode}
 			registry, err := kernel.NewContributorRegistry([]kernel.Contributor{directory, auditing, lifecycle, p})
@@ -366,8 +383,18 @@ func testMFAPasskeyMappingWork(t *testing.T, f *signinFixture, store *SessionAut
 				life = kernel.LifecyclePlan{EventType: "passkey.reauthentication.started.v1", AfterVersion: 1}
 			} else if strings.HasPrefix(mode, "update-assertion") {
 				life.EventType = "identity.passkey.rename_credential"
+			} else if strings.HasPrefix(mode, "enroll-") {
+				life = kernel.LifecyclePlan{EventType: "passkey.reauthentication.started.v1", AfterVersion: 1}
+				if strings.HasPrefix(mode, "enroll-registration-options") {
+					life.EventType = "passkey.registration.started.v1"
+				} else if strings.HasPrefix(mode, "enroll-register") {
+					life.EventType = "identity.passkey.create_credential"
+				}
 			}
 			b := identity.CommandBinding{CommandID: id, TenantID: s.TenantID, UserID: s.UserID, ActorID: identity.ActorID(s.UserID), ActorKind: authorization.SubjectUser, RecordID: s.SessionID, OperationID: op.OperationID, SchemaID: op.SchemaID, SchemaVersion: op.SchemaVersion, PolicyID: "component", PolicyVersion: 1, CorrelationID: "component"}
+			if strings.HasPrefix(mode, "enroll-") {
+				b.RecordID = string(id)
+			}
 			if mode == "foreign-subject" {
 				p.record = mfaMappingForeignRecord(t, record, "user")
 			}
@@ -414,7 +441,10 @@ func testMFAPasskeyMappingWork(t *testing.T, f *signinFixture, store *SessionAut
 			}
 			_, applyErr := coordinator.ApplyFeature(f.ctx, w, command)
 			_, _ = coordinator.Abort(w, applyErr)
-			want := mode == "current-locks" || mode == "sibling-target" || mode == "update-options" || mode == "update-assertion"
+			want := mode == "current-locks" || mode == "sibling-target" || mode == "update-options" || mode == "update-assertion" || mode == "enroll-assertion-options" || mode == "enroll-registration-options" || mode == "enroll-register"
+			if want && !p.factorChecked {
+				t.Fatal("original factor owner did not admit the mapping test")
+			}
 			if applyErr == nil || p.admitted != want || p.checked != (mode == "current-locks") {
 				t.Fatal("mapping Work scope/fence changed", applyErr, p.admitted, p.checked)
 			}

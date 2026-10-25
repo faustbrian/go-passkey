@@ -43,8 +43,8 @@ type SessionManagementConfig struct {
 	PolicyID          string
 	PolicyVersion     uint64
 	// TOTP explicitly selects completed passkey/TOTP sessions instead of the
-	// ordinary known-empty profile. It enables label rename only, not enrolled
-	// factor enrollment/removal or another secondary-factor fallback.
+	// ordinary known-empty profile. It enables label rename and additional-key
+	// enrollment, not key removal or another secondary-factor fallback.
 	TOTP bool
 }
 

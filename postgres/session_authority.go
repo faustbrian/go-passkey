@@ -213,7 +213,8 @@ func (a *SessionAuthority) ObserveMFAPasskeySession(ctx context.Context, namespa
 }
 
 // RequireMFAPasskeySession locks only the original active native mapping in
-// exact registered TOTP-completion, label-update or self-session-revoke-one Work. The native
+// exact registered TOTP-completion, label-update, additional-key enrollment or
+// self-session-revoke-one Work. The native
 // caller must already fence its current directory/credential/policy and actual
 // factor authority: factor locks MUST precede these RP/handle/credential locks,
 // matching signin and enrollment. This mapping-only port cannot supply factor
@@ -255,6 +256,19 @@ func (a *SessionAuthority) RequireMFAPasskeySession(ctx context.Context, w kerne
 				return identity.ForbiddenError{}
 			}
 		} else if life.EventType != "identity.passkey.rename_credential" || life.EventIndex != 0 || life.BeforeVersion == 0 || life.BeforeVersion == ^uint64(0) || life.AfterVersion != life.BeforeVersion+1 {
+			return identity.ForbiddenError{}
+		}
+	case (f.Operation == sessionEnrollmentOperation(0) || f.Operation == sessionEnrollmentOperation(1) || f.Operation == sessionEnrollmentOperation(2)) && f.Contributor == (kernel.ContributorDescriptor{Owner: "passkey/postgres", ContractID: "identity.passkey", Version: 1}):
+		if b.UserID != s.UserID || b.AnonymousFlowID != "" || b.ActorKind != authorization.SubjectUser || b.ActorID != identity.ActorID(s.UserID) || b.RecordID != string(b.CommandID) {
+			return identity.ForbiddenError{}
+		}
+		event := "passkey.reauthentication.started.v1"
+		if f.Operation == sessionEnrollmentOperation(1) {
+			event = "passkey.registration.started.v1"
+		} else if f.Operation == sessionEnrollmentOperation(2) {
+			event = "identity.passkey.create_credential"
+		}
+		if life != (kernel.LifecyclePlan{EventType: event, AfterVersion: 1}) {
 			return identity.ForbiddenError{}
 		}
 	default:

@@ -24,6 +24,9 @@ import (
 // CSRF, protocol, policy and risk owners as session management. It enables only
 // the explicit service constructed from it, never an HTTP route or password
 // proof fallback. Install the selected histories, including WebAuthn migration5.
+// TOTP explicitly selects completed passkey/TOTP sessions, never ordinary or
+// other secondary-factor fallback. The original confirmed factor remains current
+// through each protected phase and final precommit checks.
 type SessionEnrollmentConfig = SessionManagementConfig
 
 // SessionEnrollmentService adds resident UV credentials using a genuine fresh
